@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'subject_screen.dart'; // <-- ADD THIS LINE
 
 void main() {
   runApp(const EmmaGAdventuresApp());
@@ -11,10 +12,7 @@ class EmmaGAdventuresApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Emma G Adventures',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        fontFamily: 'Nunito',
-      ),
+      theme: ThemeData(primarySwatch: Colors.blue, fontFamily: 'Nunito'),
       home: const MainMenuScreen(),
       debugShowCheckedModeBanner: false,
     );
@@ -42,14 +40,17 @@ class SubjectIconButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Column(
-        mainAxisSize: MainAxisSize.min, // Ensures the column doesn't stretch vertically
+        mainAxisSize:
+            MainAxisSize.min, // Ensures the column doesn't stretch vertically
         children: [
           Image.asset(
             iconPath,
             width: 90, // Set a consistent size for the icon images
             height: 90,
           ),
-          const SizedBox(height: 8), // Adds a little space between the icon and text
+          const SizedBox(
+            height: 8,
+          ), // Adds a little space between the icon and text
           Text(
             subjectName,
             style: const TextStyle(
@@ -64,7 +65,6 @@ class SubjectIconButton extends StatelessWidget {
     );
   }
 }
-
 
 class MainMenuScreen extends StatelessWidget {
   const MainMenuScreen({super.key});
@@ -97,62 +97,91 @@ class MainMenuScreen extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                       shadows: [
-                        Shadow(blurRadius: 10.0, color: Colors.black54)
+                        Shadow(blurRadius: 10.0, color: Colors.black54),
                       ],
                     ),
                   ),
                   const SizedBox(height: 60), // Increased space before icons
-
                   // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
                   // UPDATED SECTION: Replaced the placeholder with a Row of our new buttons.
                   // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly, // This spreads the icons out evenly
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       SubjectIconButton(
                         iconPath: "assets/images/math_icon.png",
                         subjectName: "Math",
                         onTap: () {
-                          // For now, we just print to the console to test it.
-                          print("Tapped on Math!");
+                          // This code navigates to the new screen
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) =>
+                                      const SubjectScreen(subjectName: "Math"),
+                            ),
+                          );
                         },
                       ),
                       SubjectIconButton(
                         iconPath: "assets/images/language_arts_icon.png",
                         subjectName: "Reading",
                         onTap: () {
-                          print("Tapped on Reading!");
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) => const SubjectScreen(
+                                    subjectName: "Reading",
+                                  ),
+                            ),
+                          );
                         },
                       ),
                       SubjectIconButton(
                         iconPath: "assets/images/science_icon.png",
                         subjectName: "Science",
                         onTap: () {
-                          print("Tapped on Science!");
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) => const SubjectScreen(
+                                    subjectName: "Science",
+                                  ),
+                            ),
+                          );
                         },
                       ),
                       SubjectIconButton(
                         iconPath: "assets/images/social_studies_icon.png",
-                        subjectName: "Social Studies",
+                        subjectName: "World",
                         onTap: () {
-                          print("Tapped on World!");
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) =>
+                                      const SubjectScreen(subjectName: "Social Studies"),
+                            ),
+                          );
                         },
                       ),
                     ],
                   ),
-                ],
-              ),
-            ),
-          ),
 
-          // 3. The Character Image (No changes here)
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(
-              height: 250,
-              child: Image.asset(
-                "assets/images/emma_character.png",
-                fit: BoxFit.contain,
+                  // 3. The Character Image (No changes here)
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Container(
+                      height: 250,
+                      child: Image.asset(
+                        "assets/images/emma_character.png",
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
