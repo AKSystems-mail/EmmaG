@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'subject_screen.dart';
 
 void main() {
   runApp(const EmmaGAdventuresApp());
