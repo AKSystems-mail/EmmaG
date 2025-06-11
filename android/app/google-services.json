@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "872548253681",
+    "project_id": "emma-g-adventures",
+    "storage_bucket": "emma-g-adventures.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:872548253681:android:df86069469604f5808ce50",
+        "android_client_info": {
+          "package_name": "com.emma_g_adv.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAo6rhugWANVFVwAYDEO3izsCMcQXZmuCE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
