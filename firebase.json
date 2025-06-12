@@ -1,1 +1,39 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"emma-g-adventures","appId":"1:872548253681:android:df86069469604f5808ce50","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"emma-g-adventures","configurations":{"android":"1:872548253681:android:df86069469604f5808ce50","ios":"1:872548253681:ios:b823547cbbcfe59208ce50"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "emma-g-adventures",
+          "appId": "1:872548253681:android:df86069469604f5808ce50",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "emma-g-adventures",
+          "configurations": {
+            "android": "1:872548253681:android:df86069469604f5808ce50",
+            "ios": "1:872548253681:ios:b823547cbbcfe59208ce50"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run lint",
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ]
+    }
+  ]
+}

@@ -8,7 +8,7 @@ import google.generativeai as genai
 # IMPORTANT: Replace "YOUR_API_KEY_HERE" with the key you got from Google AI Studio.
 # For better security, it's best to set this as an environment variable,
 # but for this script, pasting it directly is fine.
-API_KEY = REDACTED
+API_KEY = "REDACTED"
 
 # --- Define the lesson you want to create ---
 # You can change these values to generate any lesson you want!

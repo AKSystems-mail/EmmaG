@@ -12,3 +12,5 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+# Ignore Firebase service account key
+service-account-key.json

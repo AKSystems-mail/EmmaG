@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'quiz_screen.dart';
+import 'chat_screen.dart';
 
 class SubjectScreen extends StatefulWidget {
   final String subjectName;
@@ -172,8 +173,22 @@ class _SubjectScreenState extends State<SubjectScreen> {
               onPressed: _launchQuiz,
               child: const Text("Let's Practice!"),
             ),
-        ],
-      );
+      const SizedBox(height: 20),
+      TextButton.icon(
+        icon: const Icon(Icons.support_agent),
+        label: const Text("Ask for Help"),
+        onPressed: () {
+          // Navigate to the chat screen, passing the lesson text as context.
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ChatScreen(lessonContext: _lessonText!),
+            ),
+          );
+        },
+      ),
+    ],
+  );
     } else {
       return const Text("Welcome to your lesson!");
     }
