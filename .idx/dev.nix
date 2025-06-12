@@ -1,15 +1,30 @@
-# To learn more about how to use Nix to configure your environment
-# see: https://firebase.google.com/docs/studio/customize-workspace
+# Location: dev.nix
+
 { pkgs, ... }: {
   # Which nixpkgs channel to use.
-  channel = "stable-24.05"; # or "unstable"
+  channel = "stable-24.05";
+
   # Use https://search.nixos.org/packages to find packages
   packages = [
     pkgs.jdk17
     pkgs.unzip
+    
+    # We keep your specific Python version.
+    pkgs.python312
+
+    # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    # ADDED: This is the "Nix way" to add Python libraries.
+    # It creates a Python environment that includes the specified packages.
+    # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    (pkgs.python312.withPackages (ps: [
+      ps.google-generativeai
+    ]))
   ];
+
   # Sets environment variables in the workspace
   env = {};
+
+  # Keep the entire idx configuration block as it is.
   idx = {
     # Search for the extensions you want on https://open-vsx.org/ and use "publisher.id"
     extensions = [

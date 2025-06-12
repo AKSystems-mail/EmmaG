@@ -1,10 +1,21 @@
-import 'package:flutter/material.dart';
-import 'subject_screen.dart'; // <-- ADD THIS LINE
+// Location: lib/main.dart
 
-void main() {
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+import 'subject_screen.dart';
+import 'auth_screen.dart'; // Import our new auth screen
+
+// This main() function is correct and initializes Firebase.
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const EmmaGAdventuresApp());
 }
 
+// This is the root widget of your application.
 class EmmaGAdventuresApp extends StatelessWidget {
   const EmmaGAdventuresApp({super.key});
 
@@ -12,20 +23,28 @@ class EmmaGAdventuresApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Emma G Adventures',
-      theme: ThemeData(primarySwatch: Colors.blue, fontFamily: 'Nunito'),
-      home: const MainMenuScreen(),
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        fontFamily: 'Nunito',
+      ),
+      // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+      // THE ONLY CHANGE IS HERE: We point the app to the AuthGate.
+      // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+      home: const AuthGate(),
       debugShowCheckedModeBanner: false,
     );
   }
 }
 
-// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-// NEW WIDGET: A reusable button for our subject icons.
-// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+// ===================================================================
+// NO CHANGES ARE NEEDED TO THE WIDGETS BELOW THIS LINE.
+// They are here for completeness and are correct as they are.
+// ===================================================================
+
 class SubjectIconButton extends StatelessWidget {
   final String iconPath;
   final String subjectName;
-  final VoidCallback onTap; // A function to call when the button is tapped
+  final VoidCallback onTap;
 
   const SubjectIconButton({
     super.key,
@@ -36,21 +55,17 @@ class SubjectIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // GestureDetector detects taps on its child widget.
     return GestureDetector(
       onTap: onTap,
       child: Column(
-        mainAxisSize:
-            MainAxisSize.min, // Ensures the column doesn't stretch vertically
+        mainAxisSize: MainAxisSize.min,
         children: [
           Image.asset(
             iconPath,
-            width: 90, // Set a consistent size for the icon images
-            height: 90,
+            width: 110,
+            height: 110,
           ),
-          const SizedBox(
-            height: 8,
-          ), // Adds a little space between the icon and text
+          const SizedBox(height: 8),
           Text(
             subjectName,
             style: const TextStyle(
@@ -74,7 +89,6 @@ class MainMenuScreen extends StatelessWidget {
     return Scaffold(
       body: Stack(
         children: [
-          // 1. The Background Image (No changes here)
           Container(
             decoration: const BoxDecoration(
               image: DecorationImage(
@@ -83,8 +97,9 @@ class MainMenuScreen extends StatelessWidget {
               ),
             ),
           ),
-
-          // 2. The Main Content
+          Container(
+            color: Colors.black.withOpacity(0.4),
+          ),
           SafeArea(
             child: Center(
               child: Column(
@@ -97,14 +112,11 @@ class MainMenuScreen extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                       shadows: [
-                        Shadow(blurRadius: 10.0, color: Colors.black54),
+                        Shadow(blurRadius: 10.0, color: Colors.black54)
                       ],
                     ),
                   ),
-                  const SizedBox(height: 60), // Increased space before icons
-                  // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-                  // UPDATED SECTION: Replaced the placeholder with a Row of our new buttons.
-                  // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+                  const SizedBox(height: 60),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
@@ -112,13 +124,10 @@ class MainMenuScreen extends StatelessWidget {
                         iconPath: "assets/images/math_icon.png",
                         subjectName: "Math",
                         onTap: () {
-                          // This code navigates to the new screen
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder:
-                                  (context) =>
-                                      const SubjectScreen(subjectName: "Math"),
+                              builder: (context) => const SubjectScreen(subjectName: "Math"),
                             ),
                           );
                         },
@@ -127,13 +136,10 @@ class MainMenuScreen extends StatelessWidget {
                         iconPath: "assets/images/language_arts_icon.png",
                         subjectName: "Reading",
                         onTap: () {
-                          Navigator.push(
+                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder:
-                                  (context) => const SubjectScreen(
-                                    subjectName: "Reading",
-                                  ),
+                              builder: (context) => const SubjectScreen(subjectName: "Reading"),
                             ),
                           );
                         },
@@ -142,13 +148,10 @@ class MainMenuScreen extends StatelessWidget {
                         iconPath: "assets/images/science_icon.png",
                         subjectName: "Science",
                         onTap: () {
-                          Navigator.push(
+                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder:
-                                  (context) => const SubjectScreen(
-                                    subjectName: "Science",
-                                  ),
+                              builder: (context) => const SubjectScreen(subjectName: "Science"),
                             ),
                           );
                         },
@@ -157,31 +160,27 @@ class MainMenuScreen extends StatelessWidget {
                         iconPath: "assets/images/social_studies_icon.png",
                         subjectName: "World",
                         onTap: () {
-                          Navigator.push(
+                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder:
-                                  (context) =>
-                                      const SubjectScreen(subjectName: "Social Studies"),
+                              builder: (context) => const SubjectScreen(subjectName: "World"),
                             ),
                           );
                         },
                       ),
                     ],
                   ),
-
-                  // 3. The Character Image (No changes here)
-                  Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Container(
-                      height: 250,
-                      child: Image.asset(
-                        "assets/images/emma_character.png",
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                  ),
                 ],
+              ),
+            ),
+          ),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              height: 250,
+              child: Image.asset(
+                "assets/images/emma_character_transparent.png",
+                fit: BoxFit.contain,
               ),
             ),
           ),

@@ -1,10 +1,10 @@
 // Location: lib/subject_screen.dart
 
 import 'package:flutter/material.dart';
-// ADD THIS IMPORT to get access to Firestore.
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'quiz_screen.dart';
 
-// 1. We've converted the widget to a StatefulWidget.
 class SubjectScreen extends StatefulWidget {
   final String subjectName;
 
@@ -14,96 +14,167 @@ class SubjectScreen extends StatefulWidget {
   State<SubjectScreen> createState() => _SubjectScreenState();
 }
 
-// This is the "State" object for our widget.
 class _SubjectScreenState extends State<SubjectScreen> {
-  // 2. We add state variables to hold our data and track the loading status.
   bool _isLoading = true;
   String? _lessonText;
+  List<Map<String, dynamic>>? _quizData;
   String? _errorMessage;
+  int _currentLevel = 1; // Keep track of the current level
 
-  // 3. This method runs once when the screen is first created.
   @override
   void initState() {
     super.initState();
-    _fetchFirstLesson(); // We call our data-fetching function here.
+    _fetchCurrentLesson();
   }
 
-  // 4. This is the new function that talks to Firestore.
-  Future<void> _fetchFirstLesson() async {
-    try {
-      // We build the path to the document based on the subject name.
-      // For now, we hardcode the topic and level for this first test.
-      final subjectId = widget.subjectName.toLowerCase();
-      const topicId = "addition_single_digit";
-      const levelId = "1";
+  Future<void> _fetchCurrentLesson() async {
+    // When we fetch a new lesson, reset the UI to a loading state.
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
-      final docSnapshot = await FirebaseFirestore.instance
-          .collection('subjects')
-          .doc(subjectId)
-          .collection('topics')
-          .doc(topicId)
-          .collection('levels')
-          .doc(levelId)
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception("No user logged in.");
+      
+      final userId = user.uid;
+      final subjectId = widget.subjectName.toLowerCase();
+
+      final progressDocRef = FirebaseFirestore.instance
+          .collection('users').doc(userId).collection('progress').doc(subjectId);
+      final progressSnapshot = await progressDocRef.get();
+      
+      if (!progressSnapshot.exists) throw Exception("Could not find progress.");
+
+      // Store the current level in our state variable
+      _currentLevel = progressSnapshot.data()?['currentLevel'] ?? 1;
+      final levelId = _currentLevel.toString();
+      const topicId = "addition_single_digit";
+
+      final lessonDocSnapshot = await FirebaseFirestore.instance
+          .collection('subjects').doc(subjectId).collection('topics').doc(topicId).collection('levels').doc(levelId)
           .get();
 
-      // Check if the document actually exists in Firestore.
-      if (docSnapshot.exists) {
-        // If it exists, update our state with the lesson text.
+      if (lessonDocSnapshot.exists) {
+        final data = lessonDocSnapshot.data();
         setState(() {
-          _lessonText = docSnapshot.data()?['lessonText'];
-          _isLoading = false; // Stop the loading spinner
+          _lessonText = data?['lessonText'];
+          _quizData = data?['quiz'] is List ? List<Map<String, dynamic>>.from(data?['quiz']) : null;
+          _isLoading = false;
         });
       } else {
-        // If it doesn't exist, set an error message.
+        // This is a good state - it means the user has finished all available content!
         setState(() {
-          _errorMessage = "Oh no! We couldn't find that lesson.";
+          _lessonText = "Congratulations! You've completed all the lessons for this topic!";
+          _quizData = null; // No quiz if there's no lesson
           _isLoading = false;
         });
       }
     } catch (e) {
-      // If any other error happens (like no internet), set an error message.
       setState(() {
-        _errorMessage = "An error occurred. Please try again.";
+        _errorMessage = "An error occurred: ${e.toString()}";
         _isLoading = false;
       });
-      print("Firestore Error: $e"); // Print the actual error to the console for debugging.
+      print("Error fetching lesson: $e");
     }
   }
 
-  // 5. The build method now displays the UI based on our state variables.
+  // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  // NEW FUNCTION: Updates the user's level in Firestore.
+  // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  Future<void> _levelUp() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final subjectId = widget.subjectName.toLowerCase();
+    final progressDocRef = FirebaseFirestore.instance
+        .collection('users').doc(user.uid).collection('progress').doc(subjectId);
+
+    // We use FieldValue.increment(1) to safely increase the level number.
+    await progressDocRef.update({'currentLevel': FieldValue.increment(1)});
+
+    // After leveling up, fetch the new lesson automatically!
+    _fetchCurrentLesson();
+  }
+
+  // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  // NEW FUNCTION: Handles launching the quiz and getting the result.
+  // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  Future<void> _launchQuiz() async {
+    if (_quizData == null || _quizData!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No practice available for this lesson yet!")),
+      );
+      return;
+    }
+
+    // `await` pauses execution until the QuizScreen is "popped".
+    // The `passed` variable will hold the true/false value we sent back.
+    final bool? passed = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => QuizScreen(quizData: _quizData!),
+      ),
+    );
+
+    // Check if the user passed the quiz.
+    if (passed == true) {
+      // If they passed, level them up!
+      await _levelUp();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Great job! You've reached the next level!"), backgroundColor: Colors.green),
+      );
+    } else {
+      // If they didn't pass, show an encouraging message.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Good try! Review the lesson and try again."), backgroundColor: Colors.orange),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.subjectName),
+        title: Text("${widget.subjectName} - Level $_currentLevel"),
         backgroundColor: Colors.brown.shade400,
       ),
-      body: Center(
-        child: _buildLessonContent(),
-      ),
+      body: Center(child: _buildLessonContent()),
     );
   }
 
-  // This helper widget decides what to show: a spinner, an error, or the lesson.
   Widget _buildLessonContent() {
     if (_isLoading) {
-      // If we're still loading, show a spinner.
       return const CircularProgressIndicator();
     } else if (_errorMessage != null) {
-      // If there was an error, show the error message.
-      return Text(_errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 18));
-    } else if (_lessonText != null) {
-      // If loading is complete and we have lesson text, show it!
       return Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Text(
-          _lessonText!,
-          style: const TextStyle(fontSize: 24),
-          textAlign: TextAlign.center,
-        ),
+        padding: const EdgeInsets.all(16.0),
+        child: Text(_errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 18), textAlign: TextAlign.center),
+      );
+    } else if (_lessonText != null) {
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Text(_lessonText!, style: const TextStyle(fontSize: 24), textAlign: TextAlign.center),
+          ),
+          const SizedBox(height: 40),
+          // Only show the button if there is a quiz for this lesson
+          if (_quizData != null)
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                textStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              // The button now calls our new _launchQuiz function.
+              onPressed: _launchQuiz,
+              child: const Text("Let's Practice!"),
+            ),
+        ],
       );
     } else {
-      // A fallback just in case something unexpected happens.
       return const Text("Welcome to your lesson!");
     }
   }
