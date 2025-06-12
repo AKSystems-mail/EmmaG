@@ -1,0 +1,14 @@
+{
+  "lessonText": "Nouns are words that name people, places, or things!  Let's learn to find them in sentences.",
+  "difficulty": 101,
+  "quiz": [
+    {
+      "question": "Is 'dog' a person, place, or thing?",
+      "answer": "thing"
+    },
+    {
+      "question": "Is 'school' a person, place, or thing?",
+      "answer": "place"
+    }
+  ]
+}
