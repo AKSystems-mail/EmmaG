@@ -4,11 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'quiz_screen.dart';
-import 'chat_screen.dart';
 
 class SubjectScreen extends StatefulWidget {
   final String subjectName;
-
   const SubjectScreen({super.key, required this.subjectName});
 
   @override
@@ -20,7 +18,8 @@ class _SubjectScreenState extends State<SubjectScreen> {
   String? _lessonText;
   List<Map<String, dynamic>>? _quizData;
   String? _errorMessage;
-  int _currentLevel = 1; // Keep track of the current level
+  int _currentLevel = 1;
+  int _currentTopicIndex = 0; // ADDED: State for the topic index
 
   @override
   void initState() {
@@ -29,30 +28,44 @@ class _SubjectScreenState extends State<SubjectScreen> {
   }
 
   Future<void> _fetchCurrentLesson() async {
-    // When we fetch a new lesson, reset the UI to a loading state.
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    setState(() { _isLoading = true; _errorMessage = null; });
 
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception("No user logged in.");
       
-      final userId = user.uid;
       final subjectId = widget.subjectName.toLowerCase();
 
-      final progressDocRef = FirebaseFirestore.instance
-          .collection('users').doc(userId).collection('progress').doc(subjectId);
+      // 1. Fetch the Curriculum Map (the topic order)
+      final subjectDoc = await FirebaseFirestore.instance.collection('subjects').doc(subjectId).get();
+      if (!subjectDoc.exists || subjectDoc.data()?['topicOrder'] == null) {
+        throw Exception("Curriculum not found for this subject.");
+      }
+      final List<String> topicOrder = List<String>.from(subjectDoc.data()!['topicOrder']);
+
+      // 2. Fetch the user's progress
+      final progressDocRef = FirebaseFirestore.instance.collection('users').doc(user.uid).collection('progress').doc(subjectId);
       final progressSnapshot = await progressDocRef.get();
-      
       if (!progressSnapshot.exists) throw Exception("Could not find progress.");
 
-      // Store the current level in our state variable
+      // 3. Determine the current topic and level
+      _currentTopicIndex = progressSnapshot.data()?['currentTopicIndex'] ?? 0;
       _currentLevel = progressSnapshot.data()?['currentLevel'] ?? 1;
-      final levelId = _currentLevel.toString();
-      const topicId = "addition_single_digit";
 
+      if (_currentTopicIndex >= topicOrder.length) {
+        // User has finished all topics for this subject!
+        setState(() {
+          _lessonText = "Wow! You've mastered all the topics in ${widget.subjectName}!";
+          _quizData = null;
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final topicId = topicOrder[_currentTopicIndex];
+      final levelId = _currentLevel.toString();
+
+      // 4. Fetch the specific lesson content
       final lessonDocSnapshot = await FirebaseFirestore.instance
           .collection('subjects').doc(subjectId).collection('topics').doc(topicId).collection('levels').doc(levelId)
           .get();
@@ -65,26 +78,18 @@ class _SubjectScreenState extends State<SubjectScreen> {
           _isLoading = false;
         });
       } else {
-        // This is a good state - it means the user has finished all available content!
-        setState(() {
-          _lessonText = "Congratulations! You've completed all the lessons for this topic!";
-          _quizData = null; // No quiz if there's no lesson
-          _isLoading = false;
-        });
+        // This now means the user has finished all levels for the CURRENT topic.
+        // We trigger a level up, which will move them to the next topic.
+        await _levelUp(isTopicFinished: true);
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = "An error occurred: ${e.toString()}";
-        _isLoading = false;
-      });
+      setState(() { _errorMessage = "An error occurred: ${e.toString()}"; _isLoading = false; });
       print("Error fetching lesson: $e");
     }
   }
 
-  // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-  // NEW FUNCTION: Updates the user's level in Firestore.
-  // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-  Future<void> _levelUp() async {
+  // UPDATED: The level up logic is now much smarter
+  Future<void> _levelUp({bool isTopicFinished = false}) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
@@ -92,42 +97,35 @@ class _SubjectScreenState extends State<SubjectScreen> {
     final progressDocRef = FirebaseFirestore.instance
         .collection('users').doc(user.uid).collection('progress').doc(subjectId);
 
-    // We use FieldValue.increment(1) to safely increase the level number.
-    await progressDocRef.update({'currentLevel': FieldValue.increment(1)});
-
+    if (isTopicFinished) {
+      // If the topic is finished, increment the topic index and reset the level to 1
+      await progressDocRef.update({
+        'currentTopicIndex': FieldValue.increment(1),
+        'currentLevel': 1,
+      });
+    } else {
+      // Otherwise, just increment the level
+      await progressDocRef.update({'currentLevel': FieldValue.increment(1)});
+    }
+    
     // After leveling up, fetch the new lesson automatically!
     _fetchCurrentLesson();
   }
 
-  // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-  // NEW FUNCTION: Handles launching the quiz and getting the result.
-  // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   Future<void> _launchQuiz() async {
-    if (_quizData == null || _quizData!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("No practice available for this lesson yet!")),
-      );
-      return;
-    }
+    if (_quizData == null || _quizData!.isEmpty) return;
 
-    // `await` pauses execution until the QuizScreen is "popped".
-    // The `passed` variable will hold the true/false value we sent back.
     final bool? passed = await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => QuizScreen(quizData: _quizData!),
-      ),
+      MaterialPageRoute(builder: (context) => QuizScreen(quizData: _quizData!)),
     );
 
-    // Check if the user passed the quiz.
     if (passed == true) {
-      // If they passed, level them up!
-      await _levelUp();
+      await _levelUp(); // Call the regular level up
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Great job! You've reached the next level!"), backgroundColor: Colors.green),
       );
     } else {
-      // If they didn't pass, show an encouraging message.
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Good try! Review the lesson and try again."), backgroundColor: Colors.orange),
       );
@@ -162,33 +160,17 @@ class _SubjectScreenState extends State<SubjectScreen> {
             child: Text(_lessonText!, style: const TextStyle(fontSize: 24), textAlign: TextAlign.center),
           ),
           const SizedBox(height: 40),
-          // Only show the button if there is a quiz for this lesson
           if (_quizData != null)
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                 textStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
-              // The button now calls our new _launchQuiz function.
               onPressed: _launchQuiz,
               child: const Text("Let's Practice!"),
             ),
-      const SizedBox(height: 20),
-      TextButton.icon(
-        icon: const Icon(Icons.support_agent),
-        label: const Text("Ask for Help"),
-        onPressed: () {
-          // Navigate to the chat screen, passing the lesson text as context.
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ChatScreen(lessonContext: _lessonText!),
-            ),
-          );
-        },
-      ),
-    ],
-  );
+        ],
+      );
     } else {
       return const Text("Welcome to your lesson!");
     }

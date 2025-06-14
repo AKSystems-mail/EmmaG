@@ -7,7 +7,7 @@ from firebase_admin import credentials, firestore
 # --- CONFIGURATION ---
 # Define the path to your service account key and the generated lesson file.
 SERVICE_ACCOUNT_KEY_PATH = "service-account-key.json"
-JSON_CONTENT_FILE_PATH = "reading_level_101.json" # The file you generated earlier
+JSON_CONTENT_FILE_PATH = "math_level_102.json" # The file you generated earlier
 
 # --- Define where to upload the content in Firestore ---
 # You can change these to upload different lessons.

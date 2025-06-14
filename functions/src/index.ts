@@ -3,21 +3,14 @@
 import * as functions from "firebase-functions";
 import {onCall} from "firebase-functions/v2/https";
 import {GoogleGenerativeAI} from "@google/generative-ai";
+import {defineString} from "firebase-functions/params";
 
-// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-// THE FIX: We check for the API key before using it.
-// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-const apiKey = process.env.GEMINI_API_KEY;
-if (!apiKey) {
-  // This will stop the function from deploying and give a clear error
-  // if the API key is not set in the environment configuration.
-  throw new Error("GEMINI_API_KEY environment variable not set.");
-}
-// Now we can safely initialize the client with a guaranteed value.
-const genAI = new GoogleGenerativeAI(apiKey);
+
+const geminiApiKey = defineString("GEMINI_KEY");
 
 
 export const askTheTutor = onCall(async (request) => {
+  const genAI = new GoogleGenerativeAI(geminiApiKey.value());
   const lessonContext = request.data.lessonContext;
   const userQuestion = request.data.userQuestion;
 

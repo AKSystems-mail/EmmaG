@@ -1,0 +1,16 @@
+{
+  "lessonText": "Adding single-digit numbers means putting two small groups together to find out the total number!  Let's learn to add numbers like 1 + 2 or 5 + 3.",
+  "difficulty": 101,
+  "quiz": [
+    {
+      "question": "What is 4 + 3?",
+      "options": [
+        "5",
+        "7",
+        "6",
+        "8"
+      ],
+      "correctAnswer": "7"
+    }
+  ]
+}
