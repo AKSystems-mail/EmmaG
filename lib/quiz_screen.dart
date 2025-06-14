@@ -16,26 +16,25 @@ class _QuizScreenState extends State<QuizScreen> {
   int _score = 0;
 
   void _answerQuestion(String selectedAnswer) {
-    final correctAnswer = widget.quizData[_currentQuestionIndex]['answer'];
+    final correctAnswer = widget.quizData[_currentQuestionIndex]['correctAnswer'];
     bool isCorrect = selectedAnswer == correctAnswer;
 
     if (isCorrect) {
-      // If correct, increase the score.
       _score++;
     }
 
     showDialog(
       context: context,
-      barrierDismissible: false, // User must tap the button to continue
+      barrierDismissible: false,
       builder: (context) {
         return AlertDialog(
-          title: Text(isCorrect ? "Correct!" : "Try Again!"),
+          title: Text(isCorrect ? "Correct!" : "Not Quite!"),
           content: Text("The correct answer was: $correctAnswer"),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-                _nextQuestion(); // Move to the next question
+                Navigator.of(context).pop();
+                _nextQuestion();
               },
               child: const Text("Next"),
             ),
@@ -46,15 +45,11 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   void _nextQuestion() {
-    // Check if there are more questions left.
     if (_currentQuestionIndex < widget.quizData.length - 1) {
-      // If so, move to the next question.
       setState(() {
         _currentQuestionIndex++;
       });
     } else {
-      // If the quiz is over, pop the screen and send the score back.
-      // The "true" value indicates the user passed. We'll make this smarter later.
       bool passed = _score > 0;
       Navigator.of(context).pop(passed);
     }
@@ -63,12 +58,13 @@ class _QuizScreenState extends State<QuizScreen> {
   @override
   Widget build(BuildContext context) {
     final currentQuestion = widget.quizData[_currentQuestionIndex];
+    // Get the list of options from our data.
+    final List<String> options = List<String>.from(currentQuestion['options']);
 
     return Scaffold(
       appBar: AppBar(
         title: Text("Question ${_currentQuestionIndex + 1}/${widget.quizData.length}"),
         backgroundColor: Colors.deepPurple.shade400,
-        // Prevent the user from using the back button to cheat
         automaticallyImplyLeading: false,
       ),
       body: Center(
@@ -83,16 +79,25 @@ class _QuizScreenState extends State<QuizScreen> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 40),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(minimumSize: const Size(200, 50)),
-                onPressed: () => _answerQuestion(currentQuestion['answer']),
-                child: Text(currentQuestion['answer'], style: const TextStyle(fontSize: 20)),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(minimumSize: const Size(200, 50)),
-                onPressed: () => _answerQuestion("A wrong answer"),
-                child: const Text("A wrong answer", style: TextStyle(fontSize: 20)),
+
+              // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+              // THE DYNAMIC UI UPGRADE:
+              // We use a Column and the .map() function to turn our list of
+              // strings ('options') into a list of ElevatedButton widgets.
+              // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+              Column(
+                // This creates a list of widgets from our data.
+                children: options.map((option) {
+                  return Padding(
+                    // Add some space between the buttons
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(minimumSize: const Size(250, 50)),
+                      onPressed: () => _answerQuestion(option),
+                      child: Text(option, style: const TextStyle(fontSize: 20)),
+                    ),
+                  );
+                }).toList(), // .toList() converts the mapped items into a real list of widgets
               ),
             ],
           ),

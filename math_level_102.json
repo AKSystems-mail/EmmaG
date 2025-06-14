@@ -1,0 +1,16 @@
+{
+  "lessonText": "Subtraction is taking away!  If you have 5 apples and you give away 2, how many are left?",
+  "difficulty": 102,
+  "quiz": [
+    {
+      "question": "There are 7 birds on a tree. 3 fly away. How many birds are left?",
+      "options": [
+        "10",
+        "4",
+        "5",
+        "3"
+      ],
+      "correctAnswer": "4"
+    }
+  ]
+}
