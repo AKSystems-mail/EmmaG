@@ -19,7 +19,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
   List<Map<String, dynamic>>? _quizData;
   String? _errorMessage;
   int _currentLevel = 1;
-  int _currentTopicIndex = 0; // ADDED: State for the topic index
+  int _currentTopicIndex = 0;
 
   @override
   void initState() {
@@ -36,24 +36,20 @@ class _SubjectScreenState extends State<SubjectScreen> {
       
       final subjectId = widget.subjectName.toLowerCase();
 
-      // 1. Fetch the Curriculum Map (the topic order)
       final subjectDoc = await FirebaseFirestore.instance.collection('subjects').doc(subjectId).get();
       if (!subjectDoc.exists || subjectDoc.data()?['topicOrder'] == null) {
         throw Exception("Curriculum not found for this subject.");
       }
       final List<String> topicOrder = List<String>.from(subjectDoc.data()!['topicOrder']);
 
-      // 2. Fetch the user's progress
       final progressDocRef = FirebaseFirestore.instance.collection('users').doc(user.uid).collection('progress').doc(subjectId);
       final progressSnapshot = await progressDocRef.get();
       if (!progressSnapshot.exists) throw Exception("Could not find progress.");
 
-      // 3. Determine the current topic and level
       _currentTopicIndex = progressSnapshot.data()?['currentTopicIndex'] ?? 0;
       _currentLevel = progressSnapshot.data()?['currentLevel'] ?? 1;
 
       if (_currentTopicIndex >= topicOrder.length) {
-        // User has finished all topics for this subject!
         setState(() {
           _lessonText = "Wow! You've mastered all the topics in ${widget.subjectName}!";
           _quizData = null;
@@ -65,7 +61,6 @@ class _SubjectScreenState extends State<SubjectScreen> {
       final topicId = topicOrder[_currentTopicIndex];
       final levelId = _currentLevel.toString();
 
-      // 4. Fetch the specific lesson content
       final lessonDocSnapshot = await FirebaseFirestore.instance
           .collection('subjects').doc(subjectId).collection('topics').doc(topicId).collection('levels').doc(levelId)
           .get();
@@ -78,8 +73,6 @@ class _SubjectScreenState extends State<SubjectScreen> {
           _isLoading = false;
         });
       } else {
-        // This now means the user has finished all levels for the CURRENT topic.
-        // We trigger a level up, which will move them to the next topic.
         await _levelUp(isTopicFinished: true);
       }
     } catch (e) {
@@ -88,7 +81,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
     }
   }
 
-  // UPDATED: The level up logic is now much smarter
+  // This is the _levelUp function. It is now at the correct indentation level.
   Future<void> _levelUp({bool isTopicFinished = false}) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -98,20 +91,32 @@ class _SubjectScreenState extends State<SubjectScreen> {
         .collection('users').doc(user.uid).collection('progress').doc(subjectId);
 
     if (isTopicFinished) {
-      // If the topic is finished, increment the topic index and reset the level to 1
+      try {
+        final subjectDoc = await FirebaseFirestore.instance.collection('subjects').doc(subjectId).get();
+        final topicOrder = List<String>.from(subjectDoc.data()!['topicOrder']);
+        final finishedTopicId = topicOrder[_currentTopicIndex];
+
+        final userDocRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+        await userDocRef.update({
+          'earnedBadges': FieldValue.arrayUnion([finishedTopicId])
+        });
+        print("Awarded badge for topic: $finishedTopicId");
+      } catch (e) {
+        print("Error awarding badge: $e");
+      }
+
       await progressDocRef.update({
         'currentTopicIndex': FieldValue.increment(1),
         'currentLevel': 1,
       });
     } else {
-      // Otherwise, just increment the level
       await progressDocRef.update({'currentLevel': FieldValue.increment(1)});
     }
     
-    // After leveling up, fetch the new lesson automatically!
     _fetchCurrentLesson();
   }
 
+  // This is the _launchQuiz function, now at the correct level.
   Future<void> _launchQuiz() async {
     if (_quizData == null || _quizData!.isEmpty) return;
 
@@ -121,7 +126,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
     );
 
     if (passed == true) {
-      await _levelUp(); // Call the regular level up
+      await _levelUp();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Great job! You've reached the next level!"), backgroundColor: Colors.green),
       );
@@ -132,6 +137,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
     }
   }
 
+  // This is the build method, now at the correct level.
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -143,6 +149,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
     );
   }
 
+  // This is the _buildLessonContent method, now at the correct level.
   Widget _buildLessonContent() {
     if (_isLoading) {
       return const CircularProgressIndicator();
