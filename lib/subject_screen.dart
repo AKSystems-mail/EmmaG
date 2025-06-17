@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'quiz_screen.dart';
+import 'sound_manager.dart';
 
 class SubjectScreen extends StatefulWidget {
   final String subjectName;
@@ -19,7 +20,8 @@ class _SubjectScreenState extends State<SubjectScreen> {
   List<Map<String, dynamic>>? _quizData;
   String? _errorMessage;
   int _currentLevel = 1;
-  int _currentTopicIndex = 0;
+  String _currentTopicId = '';
+  int _currentTopicIndex = 0; // We still need this for linear subjects
 
   @override
   void initState() {
@@ -36,33 +38,54 @@ class _SubjectScreenState extends State<SubjectScreen> {
       
       final subjectId = widget.subjectName.toLowerCase();
 
-      final subjectDoc = await FirebaseFirestore.instance.collection('subjects').doc(subjectId).get();
-      if (!subjectDoc.exists || subjectDoc.data()?['topicOrder'] == null) {
-        throw Exception("Curriculum not found for this subject.");
-      }
-      final List<String> topicOrder = List<String>.from(subjectDoc.data()!['topicOrder']);
+      // --- START OF HYBRID LOGIC ---
 
-      final progressDocRef = FirebaseFirestore.instance.collection('users').doc(user.uid).collection('progress').doc(subjectId);
+      // 1. Fetch the main subject document and user progress simultaneously
+      final userDocFuture = FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final subjectDocFuture = FirebaseFirestore.instance.collection('subjects').doc(subjectId).get();
+      
+      final userDoc = await userDocFuture;
+      final subjectDoc = await subjectDocFuture;
+
+      final progressDocRef = userDoc.reference.collection('progress').doc(subjectId);
       final progressSnapshot = await progressDocRef.get();
+      
       if (!progressSnapshot.exists) throw Exception("Could not find progress.");
-
-      _currentTopicIndex = progressSnapshot.data()?['currentTopicIndex'] ?? 0;
       _currentLevel = progressSnapshot.data()?['currentLevel'] ?? 1;
 
-      if (_currentTopicIndex >= topicOrder.length) {
-        setState(() {
-          _lessonText = "Wow! You've mastered all the topics in ${widget.subjectName}!";
-          _quizData = null;
-          _isLoading = false;
-        });
-        return;
+      // 2. Check if a topicOrder exists. This is the main decision point.
+      final topicOrderData = subjectDoc.data()?['topicOrder'];
+      
+      if (topicOrderData != null && topicOrderData is List && topicOrderData.isNotEmpty) {
+        // --- PATH A: Linear Curriculum (Math, Reading) ---
+        final List<String> topicOrder = List<String>.from(topicOrderData);
+        _currentTopicIndex = progressSnapshot.data()?['currentTopicIndex'] ?? 0;
+
+        if (_currentTopicIndex >= topicOrder.length) {
+          throw Exception("All ordered topics completed!");
+        }
+        _currentTopicId = topicOrder[_currentTopicIndex];
+
+      } else {
+        // --- PATH B: Non-Linear "Checklist" Curriculum (Science, World) ---
+        final List<String> earnedBadges = List<String>.from(userDoc.data()?['earnedBadges'] ?? []);
+        final topicsSnapshot = await subjectDoc.reference.collection('topics').get();
+        
+        String? nextTopicId;
+        for (final topicDoc in topicsSnapshot.docs) {
+          if (!earnedBadges.contains(topicDoc.id)) {
+            nextTopicId = topicDoc.id;
+            break;
+          }
+        }
+        if (nextTopicId == null) throw Exception("All non-linear topics completed!");
+        _currentTopicId = nextTopicId;
       }
 
-      final topicId = topicOrder[_currentTopicIndex];
+      // 3. Now that we have the correct topicId, fetch the lesson content
       final levelId = _currentLevel.toString();
-
       final lessonDocSnapshot = await FirebaseFirestore.instance
-          .collection('subjects').doc(subjectId).collection('topics').doc(topicId).collection('levels').doc(levelId)
+          .collection('subjects').doc(subjectId).collection('topics').doc(_currentTopicId).collection('levels').doc(levelId)
           .get();
 
       if (lessonDocSnapshot.exists) {
@@ -73,46 +96,59 @@ class _SubjectScreenState extends State<SubjectScreen> {
           _isLoading = false;
         });
       } else {
-        await _levelUp(isTopicFinished: true);
+        // This means the user finished all levels for the current topic, regardless of path
+        await _completeTopic();
       }
     } catch (e) {
-      setState(() { _errorMessage = "An error occurred: ${e.toString()}"; _isLoading = false; });
-      print("Error fetching lesson: $e");
+      // A generic catch-all for "You're all done!" or actual errors
+      final message = e.toString().contains("completed") 
+          ? "Wow! You've mastered all the topics in ${widget.subjectName}!"
+          : "An error occurred. Please try again.";
+      setState(() { _lessonText = message; _quizData = null; _isLoading = false; });
+      print("Flow ended or error occurred: $e");
     }
   }
 
-  // This is the _levelUp function. It is now at the correct indentation level.
-  Future<void> _levelUp({bool isTopicFinished = false}) async {
+  // This function now handles completing ANY topic
+  Future<void> _completeTopic() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // Award the badge for the topic they just finished
+    final userDocRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+    await userDocRef.update({
+      'earnedBadges': FieldValue.arrayUnion([_currentTopicId])
+    });
+    print("Awarded badge for topic: $_currentTopicId");
+
+    // Reset their level to 1 and check if we need to increment the topic index
+    final subjectId = widget.subjectName.toLowerCase();
+    final progressDocRef = userDocRef.collection('progress').doc(subjectId);
+    
+    // Check if the subject was linear to decide whether to increment the index
+    final subjectDoc = await FirebaseFirestore.instance.collection('subjects').doc(subjectId).get();
+    if (subjectDoc.data()?['topicOrder'] != null) {
+      await progressDocRef.update({
+        'currentTopicIndex': FieldValue.increment(1),
+        'currentLevel': 1,
+      });
+    } else {
+      await progressDocRef.update({'currentLevel': 1});
+    }
+
+    _fetchCurrentLesson();
+  }
+  
+  // This function now just increments the level
+  Future<void> _levelUp() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     final subjectId = widget.subjectName.toLowerCase();
     final progressDocRef = FirebaseFirestore.instance
         .collection('users').doc(user.uid).collection('progress').doc(subjectId);
-
-    if (isTopicFinished) {
-      try {
-        final subjectDoc = await FirebaseFirestore.instance.collection('subjects').doc(subjectId).get();
-        final topicOrder = List<String>.from(subjectDoc.data()!['topicOrder']);
-        final finishedTopicId = topicOrder[_currentTopicIndex];
-
-        final userDocRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
-        await userDocRef.update({
-          'earnedBadges': FieldValue.arrayUnion([finishedTopicId])
-        });
-        print("Awarded badge for topic: $finishedTopicId");
-      } catch (e) {
-        print("Error awarding badge: $e");
-      }
-
-      await progressDocRef.update({
-        'currentTopicIndex': FieldValue.increment(1),
-        'currentLevel': 1,
-      });
-    } else {
-      await progressDocRef.update({'currentLevel': FieldValue.increment(1)});
-    }
     
+    await progressDocRef.update({'currentLevel': FieldValue.increment(1)});
     _fetchCurrentLesson();
   }
 
@@ -127,6 +163,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
 
     if (passed == true) {
       await _levelUp();
+      SoundManager.playLevelUpSound();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Great job! You've reached the next level!"), backgroundColor: Colors.green),
       );

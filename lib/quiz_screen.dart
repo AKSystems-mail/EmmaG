@@ -1,6 +1,8 @@
 // Location: lib/quiz_screen.dart
 
 import 'package:flutter/material.dart';
+import 'sound_manager.dart';
+import 'dart:math';
 
 class QuizScreen extends StatefulWidget {
   final List<Map<String, dynamic>> quizData;
@@ -14,6 +16,28 @@ class QuizScreen extends StatefulWidget {
 class _QuizScreenState extends State<QuizScreen> {
   int _currentQuestionIndex = 0;
   int _score = 0;
+  
+  // ADDED: A new state variable to hold the shuffled options.
+  List<String> _shuffledOptions = [];
+
+  @override
+  void initState() {
+    super.initState();
+    // When the screen first loads, shuffle the options for the first question.
+    _shuffleOptionsForCurrentQuestion();
+  }
+
+  // ADDED: A new function to handle shuffling.
+  void _shuffleOptionsForCurrentQuestion() {
+    // Get the original options from the widget's data.
+    final originalOptions = List<String>.from(widget.quizData[_currentQuestionIndex]['options']);
+    // Shuffle the list in place.
+    originalOptions.shuffle(Random());
+    // Update the state with the newly shuffled list.
+    setState(() {
+      _shuffledOptions = originalOptions;
+    });
+  }
 
   void _answerQuestion(String selectedAnswer) {
     final correctAnswer = widget.quizData[_currentQuestionIndex]['correctAnswer'];
@@ -21,6 +45,7 @@ class _QuizScreenState extends State<QuizScreen> {
 
     if (isCorrect) {
       _score++;
+      SoundManager.playCorrectSound();
     }
 
     showDialog(
@@ -48,6 +73,7 @@ class _QuizScreenState extends State<QuizScreen> {
     if (_currentQuestionIndex < widget.quizData.length - 1) {
       setState(() {
         _currentQuestionIndex++;
+        _shuffleOptionsForCurrentQuestion();
       });
     } else {
       bool passed = _score > 0;
@@ -59,7 +85,6 @@ class _QuizScreenState extends State<QuizScreen> {
   Widget build(BuildContext context) {
     final currentQuestion = widget.quizData[_currentQuestionIndex];
     // Get the list of options from our data.
-    final List<String> options = List<String>.from(currentQuestion['options']);
 
     return Scaffold(
       appBar: AppBar(
@@ -86,10 +111,8 @@ class _QuizScreenState extends State<QuizScreen> {
               // strings ('options') into a list of ElevatedButton widgets.
               // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
               Column(
-                // This creates a list of widgets from our data.
-                children: options.map((option) {
+                children: _shuffledOptions.map((option) {
                   return Padding(
-                    // Add some space between the buttons
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(minimumSize: const Size(250, 50)),
@@ -97,7 +120,7 @@ class _QuizScreenState extends State<QuizScreen> {
                       child: Text(option, style: const TextStyle(fontSize: 20)),
                     ),
                   );
-                }).toList(), // .toList() converts the mapped items into a real list of widgets
+                }).toList(),
               ),
             ],
           ),
