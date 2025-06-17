@@ -7,12 +7,12 @@ from firebase_admin import credentials, firestore
 # --- CONFIGURATION ---
 # Define the path to your service account key and the generated lesson file.
 SERVICE_ACCOUNT_KEY_PATH = "service-account-key.json"
-JSON_CONTENT_FILE_PATH = "math_level_102.json" # The file you generated earlier
+JSON_CONTENT_FILE_PATH = "math_level_110.json" # The file you generated earlier
 
 # --- Define where to upload the content in Firestore ---
 # You can change these to upload different lessons.
-SUBJECT_ID = "reading"
-TOPIC_ID = "identifying_nouns"
+SUBJECT_ID = "math"
+TOPIC_ID = "addition_single_digit"
 # The script will get the level ID from the "difficulty" field in the JSON.
 
 
