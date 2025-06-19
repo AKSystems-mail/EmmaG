@@ -3,13 +3,16 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+// ADD THIS IMPORT for shared preferences
+import 'package:shared_preferences/shared_preferences.dart';
+import 'sound_manager.dart'; // For click sounds
 
-// A simple data class to hold the details for a badge.
 class Badge {
+  final String id; // We'll store the ID now for potential future use
   final String name;
   final String imageUrl;
 
-  Badge({required this.name, required this.imageUrl});
+  Badge({required this.id, required this.name, required this.imageUrl});
 }
 
 class BadgesScreen extends StatefulWidget {
@@ -23,43 +26,112 @@ class _BadgesScreenState extends State<BadgesScreen> {
   bool _isLoading = true;
   List<Badge> _earnedBadges = [];
   String? _errorMessage;
+  bool _showInfoDialog = true; // To control the initial dialog
 
   @override
   void initState() {
     super.initState();
+    _checkIfInfoDialogNeeded();
     _fetchEarnedBadges();
   }
 
+  // Check if we need to show the info dialog
+  Future<void> _checkIfInfoDialogNeeded() async {
+    final prefs = await SharedPreferences.getInstance();
+    // Get the stored preference, default to true if not found
+    setState(() {
+      _showInfoDialog = prefs.getBool('showBadgeInfoDialog') ?? true;
+    });
+
+    if (_showInfoDialog && mounted) {
+      // mounted check is important for async operations in initState
+      WidgetsBinding.instance.addPostFrameCallback((_) => _showBadgeInfoDialog());
+    }
+  }
+
+  void _showBadgeInfoDialog() {
+    bool doNotShowAgain = false; // Local state for the checkbox
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        // Use StatefulBuilder to manage the checkbox state inside the dialog
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text("Welcome to Your Trophy Room!"),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    "Here you can see all the cool badges you earn by mastering topics in each subject. "
+                    "Keep learning to collect them all!",
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: doNotShowAgain,
+                        onChanged: (bool? value) {
+                          setDialogState(() { // Use setDialogState for dialog's internal state
+                            doNotShowAgain = value ?? false;
+                          });
+                        },
+                      ),
+                      const Text("Don't show this again"),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () async {
+                    SoundManager.playClickSound();
+                    if (doNotShowAgain) {
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setBool('showBadgeInfoDialog', false);
+                    }
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text("OK"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _fetchEarnedBadges() async {
+    // ... (This function is mostly the same, but ensure you are getting the ID)
+    setState(() => _isLoading = true);
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception("No user logged in.");
 
-      // 1. Get the list of badge IDs the user has earned.
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       final List<String> badgeIds = List<String>.from(userDoc.data()?['earnedBadges'] ?? []);
 
       if (badgeIds.isEmpty) {
-        // If the user has no badges, we can stop here.
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() { _isLoading = false; });
         return;
       }
 
       List<Badge> badges = [];
-      // 2. For each badge ID, fetch its details from the main 'badges' collection.
       for (String badgeId in badgeIds) {
         final badgeDoc = await FirebaseFirestore.instance.collection('badges').doc(badgeId).get();
         if (badgeDoc.exists) {
           badges.add(Badge(
+            id: badgeDoc.id, // Store the ID
             name: badgeDoc.data()?['name'] ?? 'Unnamed Badge',
             imageUrl: badgeDoc.data()?['imageUrl'] ?? '',
           ));
+        } else {
+          print("Warning: Badge document with ID '$badgeId' not found in 'badges' collection.");
         }
       }
 
-      // 3. Update the UI with the list of fetched badges.
       setState(() {
         _earnedBadges = badges;
         _isLoading = false;
@@ -81,7 +153,26 @@ class _BadgesScreenState extends State<BadgesScreen> {
         title: const Text("My Badges"),
         backgroundColor: Colors.amber.shade700,
       ),
-      body: _buildContent(),
+      // ADDED: Stack for background image
+      body: Stack(
+        children: [
+          // Background Image
+          Container(
+            decoration: const BoxDecoration(
+              image: DecorationImage(
+                image: AssetImage("assets/images/trophy_room.png"), // Your background
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          // Semi-transparent overlay for better text readability on background
+          Container(
+             color: Colors.black.withOpacity(0.3),
+          ),
+          // Actual content
+          _buildContent(),
+        ],
+      ),
     );
   }
 
@@ -90,35 +181,71 @@ class _BadgesScreenState extends State<BadgesScreen> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_errorMessage != null) {
-      return Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)));
+      return Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 18)));
     }
     if (_earnedBadges.isEmpty) {
       return const Center(
-        child: Text(
-          "No badges earned yet. Keep learning!",
-          style: TextStyle(fontSize: 18, color: Colors.grey),
+        child: Padding( // Added padding for better centering
+          padding: EdgeInsets.all(20.0),
+          child: Text(
+            "No badges earned yet.\nKeep learning to fill your trophy room!",
+            style: TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
         ),
       );
     }
 
-    // Use a GridView to display the badges nicely.
     return GridView.builder(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(24.0), // Increased padding
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3, // 3 badges per row
-        crossAxisSpacing: 16.0,
-        mainAxisSpacing: 16.0,
+        crossAxisCount: 3,
+        crossAxisSpacing: 20.0, // Increased spacing
+        mainAxisSpacing: 20.0,  // Increased spacing
+        childAspectRatio: 0.8, // Adjust for better badge shape
       ),
       itemCount: _earnedBadges.length,
       itemBuilder: (context, index) {
         final badge = _earnedBadges[index];
-        return Column(
-          children: [
-            // Use Image.network to load the badge image from the URL.
-            Image.network(badge.imageUrl, height: 80, fit: BoxFit.contain),
-            const SizedBox(height: 8),
-            Text(badge.name, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
-          ],
+        return Card( // Wrap badge in a Card for better visual separation
+          elevation: 4.0,
+          color: Colors.white.withOpacity(0.85),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Expanded( // Make image take available space
+                  child: Image.network(
+                    badge.imageUrl, 
+                    fit: BoxFit.contain,
+                    // Add a loading builder for network images
+                    loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Center(child: CircularProgressIndicator(
+                        value: loadingProgress.expectedTotalBytes != null 
+                               ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                               : null,
+                      ));
+                    },
+                    // Add an error builder for network images
+                    errorBuilder: (BuildContext context, Object exception, StackTrace? stackTrace) {
+                      return const Icon(Icons.broken_image, size: 40, color: Colors.grey);
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  badge.name, 
+                  textAlign: TextAlign.center, 
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
+                  maxLines: 2, // Prevent long names from overflowing
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
         );
       },
     );

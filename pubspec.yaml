@@ -39,6 +39,7 @@ dependencies:
   firebase_auth: ^5.1.0
   cloud_functions: ^5.0.1
   audioplayers: ^6.0.0
+  shared_preferences: ^2.2.3 # Add this line
 
 dev_dependencies:
   flutter_test:

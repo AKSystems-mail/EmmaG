@@ -8,22 +8,24 @@ import google.generativeai as genai
 # --- CONFIGURATION ---
 API_KEY = "AIzaSyBn3v9SHVN0lvxWwg1tejgmfkpqAdsKVyk" 
 
-READING_CURRICULUM = [
-    # === Foundations ===
-    ("Phonics: Short Vowel Sounds (a, e, i, o, u)", "phonics_short_vowels", 101),
-    ("Basic Sight Words (the, a, is, you, to)", "sight_words_basic", 201),
-    ("Understanding Sentences (Capital Letters and Periods)", "sentence_structure", 301),
+SCIENCE_CURRICULUM = [
+    # === Life Science ===
+    ("Living and Non-Living Things", "living_nonliving", 101),
+    ("Parts of a Plant", "plant_parts", 201),
+    ("Animal Types (Mammals, Birds, Fish)", "animal_types", 301),
+    ("The Five Senses", "five_senses", 401),
 
-    # === Building Blocks ===
-    ("Word Families (e.g., -at, -an, -ip)", "word_families", 401),
-    ("Identifying Nouns (Person, Place, or Thing)", "identifying_nouns", 501),
-    ("Identifying Verbs (Action Words)", "identifying_verbs", 601),
+    # === Earth Science ===
+    ("Types of Weather (Sunny, Rainy, Cloudy)", "weather_types", 501),
+    ("The Four Seasons", "four_seasons", 601),
+    ("Land, Water, and Air", "land_water_air", 701),
 
-    # === Comprehension and Advanced Skills ===
-    ("Reading Comprehension (Answering 'Who, What, Where')", "reading_comprehension_basic", 701),
-    ("Sequencing (First, Next, Last in a Story)", "story_sequencing", 801),
-    ("Punctuation (Question Marks and Exclamation Points)", "punctuation_marks", 901),
-    ("Finding the Main Idea", "main_idea", 1001),
+    # === Physical Science ===
+    ("States of Matter (Solid, Liquid, Gas)", "states_of_matter", 801),
+    ("Pushes and Pulls (Basic Forces)", "pushes_pulls", 901),
+
+    # === Space Science ===
+    ("The Sun, Earth, and Moon", "sun_earth_moon", 1001),
 ]
 # Add your READING_CURRICULUM, SCIENCE_CURRICULUM, etc. here
 
@@ -58,6 +60,7 @@ def generate_lesson_content(topic_name, subject, difficulty_code, level_number):
         - "question": (String) The quiz question.
         - "options": (Array of 4 Strings) The answer choices. Ensure one is clearly correct and the others are plausible but incorrect "distractors."
         - "correctAnswer": (String) The correct answer, which must exactly match one of the options.
+    - "suggestedQuestions": (Array of 2-3 Strings) Simple, relevant questions a child might ask about this lesson text.
     """
     
     # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -75,8 +78,8 @@ def main():
     """Main function to generate all content for the defined curriculum."""
     genai.configure(api_key=API_KEY)
     
-    current_curriculum = READING_CURRICULUM # Change this to select other curriculums
-    current_subject_name = "Reading"       # Make sure this matches the curriculum
+    current_curriculum = SCIENCE_CURRICULUM # Change this to select other curriculums
+    current_subject_name = "Science"       # Make sure this matches the curriculum
     
     print(f"Starting content generation for the {current_subject_name} curriculum...")
     

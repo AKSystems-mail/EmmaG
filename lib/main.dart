@@ -22,7 +22,10 @@ class EmmaGAdventuresApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Emma G Adventures',
-      theme: ThemeData(primarySwatch: Colors.blue, fontFamily: 'Faculty Glyphic'),
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        fontFamily: 'Faculty Glyphic',
+      ),
       home: const AuthGate(),
       debugShowCheckedModeBanner: false,
     );
@@ -120,49 +123,83 @@ class MainMenuScreen extends StatelessWidget {
                     physics: const NeverScrollableScrollPhysics(),
                     children: [
                       // AFTER: Using block syntax to perform two actions
-
-SubjectIconButton(
-  iconPath: "assets/images/math_icon.png",
-  subjectName: "Math",
-  onTap: () {
-    // 1. Play the sound first.
-    SoundManager.playClickSound();
-    // 2. Then, navigate to the new screen.
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const SubjectScreen(subjectName: "Math")));
-  },
-),
-SubjectIconButton(
-  iconPath: "assets/images/language_arts_icon.png",
-  subjectName: "Reading",
-  onTap: () {
-    SoundManager.playClickSound();
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const SubjectScreen(subjectName: "Reading")));
-  },
-),
-SubjectIconButton(
-  iconPath: "assets/images/science_icon.png",
-  subjectName: "Science",
-  onTap: () {
-    SoundManager.playClickSound();
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const SubjectScreen(subjectName: "Science")));
-  },
-),
-SubjectIconButton(
-  iconPath: "assets/images/social_studies_icon.png",
-  subjectName: "World",
-  onTap: () {
-    SoundManager.playClickSound();
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const SubjectScreen(subjectName: "World")));
-  },
-),
-SubjectIconButton(
-  iconPath: "assets/images/bonus_icon.png",
-  subjectName: "Bonus!",
-  onTap: () {
-    SoundManager.playClickSound();
-    Navigator.push(context, MaterialPageRoute(builder: (context) => const BonusLevelScreen()));
-  },
-),
+                      SubjectIconButton(
+                        iconPath: "assets/images/math_icon.png",
+                        subjectName: "Math",
+                        onTap: () {
+                          // 1. Play the sound first.
+                          SoundManager.playClickSound();
+                          // 2. Then, navigate to the new screen.
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) =>
+                                      const SubjectScreen(subjectName: "Math"),
+                            ),
+                          );
+                        },
+                      ),
+                      SubjectIconButton(
+                        iconPath: "assets/images/language_arts_icon.png",
+                        subjectName: "Reading",
+                        onTap: () {
+                          SoundManager.playClickSound();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) => const SubjectScreen(
+                                    subjectName: "Reading",
+                                  ),
+                            ),
+                          );
+                        },
+                      ),
+                      SubjectIconButton(
+                        iconPath: "assets/images/science_icon.png",
+                        subjectName: "Science",
+                        onTap: () {
+                          SoundManager.playClickSound();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) => const SubjectScreen(
+                                    subjectName: "Science",
+                                  ),
+                            ),
+                          );
+                        },
+                      ),
+                      SubjectIconButton(
+                        iconPath: "assets/images/social_studies_icon.png",
+                        subjectName: "World",
+                        onTap: () {
+                          SoundManager.playClickSound();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) =>
+                                      const SubjectScreen(subjectName: "World"),
+                            ),
+                          );
+                        },
+                      ),
+                      SubjectIconButton(
+                        iconPath: "assets/images/bonus_icon.png",
+                        subjectName: "Bonus!",
+                        onTap: () {
+                          SoundManager.playClickSound();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const BonusLevelScreen(),
+                            ),
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -185,23 +222,40 @@ SubjectIconButton(
           // 3. The "My Badges" Button (Top Right)
           // Positioned gives us explicit control over size and placement
           Positioned(
-            top: 40,
-            right: 16,
-            child: SizedBox(
-              width: 60, // Explicit size for the button
-              height: 60,
-              child: IconButton(
-                padding: EdgeInsets.zero, // Remove default padding
-                icon: Image.asset("assets/images/trophy_icon.png"),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const BadgesScreen(),
-                    ),
-                  );
-                },
-              ),
+            top: 510, // Adjust top position to accommodate the text
+            right: 5,
+            child: Column(
+              // Use a Column to stack the icon and text
+              mainAxisSize:
+                  MainAxisSize.min, // Make the column as small as possible
+              children: [
+                SizedBox(
+                  width: 120, // Explicit size for the button
+                  height: 120,
+                  child: IconButton(
+                    padding: EdgeInsets.zero, // Remove default padding
+                    icon: Image.asset("assets/images/trophy_icon.png"),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const BadgesScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(
+                  height: 8,
+                ), // Add some space between the icon and text
+                const Text(
+                  "Trophies",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
