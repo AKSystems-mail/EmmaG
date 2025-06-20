@@ -1,12 +1,14 @@
 // Location: lib/subject_screen.dart
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Badge;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'quiz_screen.dart';
 import 'sound_manager.dart';
 import 'textured_button.dart';
 import 'chat_screen.dart';
+import 'badge_award_screen.dart'; // Make sure this import is here
+import 'badges_screen.dart'; // We need this for the Badge data class
 
 class SubjectScreen extends StatefulWidget {
   final String subjectName;
@@ -23,7 +25,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
   String? _errorMessage;
   int _currentLevel = 1;
   String _currentTopicId = '';
-  int _currentTopicIndex = 0; // We still need this for linear subjects
+  int _currentTopicIndex = 0;
   List<String>? _suggestedQuestions;
 
   @override
@@ -32,100 +34,50 @@ class _SubjectScreenState extends State<SubjectScreen> {
     _fetchCurrentLesson();
   }
 
-  // In lib/subject_screen.dart -> _SubjectScreenState
-
   Future<void> _fetchCurrentLesson() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    setState(() { _isLoading = true; _errorMessage = null; });
 
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception("No user logged in.");
-
+      
       final subjectId = widget.subjectName.toLowerCase();
 
-      // --- Fetch all necessary data upfront ---
-      final userDocFuture =
-          FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-      final subjectDocFuture =
-          FirebaseFirestore.instance
-              .collection('subjects')
-              .doc(subjectId)
-              .get();
-
-      final userDoc = await userDocFuture;
-      final subjectDoc = await subjectDocFuture;
-
-      final progressDocRef = userDoc.reference
-          .collection('progress')
-          .doc(subjectId);
-      final progressSnapshot = await progressDocRef.get();
-
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final subjectDoc = await FirebaseFirestore.instance.collection('subjects').doc(subjectId).get();
+      final progressSnapshot = await userDoc.reference.collection('progress').doc(subjectId).get();
+      
       if (!progressSnapshot.exists) throw Exception("Could not find progress.");
       _currentLevel = progressSnapshot.data()?['currentLevel'] ?? 1;
 
-      // --- HYBRID LOGIC DECISION POINT ---
       final topicOrderData = subjectDoc.data()?['topicOrder'];
-
-      if (topicOrderData != null &&
-          topicOrderData is List &&
-          topicOrderData.isNotEmpty) {
-        // --- PATH A: Linear Curriculum (Math, Reading) ---
+      
+      if (topicOrderData != null && topicOrderData is List && topicOrderData.isNotEmpty) {
         final List<String> topicOrder = List<String>.from(topicOrderData);
         _currentTopicIndex = progressSnapshot.data()?['currentTopicIndex'] ?? 0;
-
-        if (_currentTopicIndex >= topicOrder.length) {
-          throw Exception("All ordered topics completed!");
-        }
+        if (_currentTopicIndex >= topicOrder.length) throw Exception("All ordered topics completed!");
         _currentTopicId = topicOrder[_currentTopicIndex];
       } else {
-        // --- PATH B: Non-Linear (Science/World) - CORRECTED LOGIC ---
-        final topicsSnapshot =
-            await subjectDoc.reference.collection('topics').get();
+        final topicsSnapshot = await subjectDoc.reference.collection('topics').get();
         final allTopicIds = topicsSnapshot.docs.map((doc) => doc.id).toList();
-
-        // THE FIX: We get the completed topics from the *subject's progress document*, not the user's main doc.
-        final List<String> completedTopics = List<String>.from(
-          progressSnapshot.data()?['completedTopics'] ?? [],
-        );
-
-        final availableTopics =
-            allTopicIds
-                .where((topicId) => !completedTopics.contains(topicId))
-                .toList();
-
-        if (availableTopics.isEmpty) {
-          throw Exception("All non-linear topics completed!");
-        }
+        final List<String> completedTopics = List<String>.from(progressSnapshot.data()?['completedTopics'] ?? []);
+        final availableTopics = allTopicIds.where((topicId) => !completedTopics.contains(topicId)).toList();
+        if (availableTopics.isEmpty) throw Exception("All non-linear topics completed!");
         _currentTopicId = availableTopics.first;
       }
 
       final levelId = _currentLevel.toString();
-      final lessonDocSnapshot =
-          await FirebaseFirestore.instance
-              .collection('subjects')
-              .doc(subjectId)
-              .collection('topics')
-              .doc(_currentTopicId)
-              .collection('levels')
-              .doc(levelId)
-              .get();
+      final lessonDocSnapshot = await FirebaseFirestore.instance
+          .collection('subjects').doc(subjectId).collection('topics').doc(_currentTopicId).collection('levels').doc(levelId)
+          .get();
 
       if (lessonDocSnapshot.exists) {
         final data = lessonDocSnapshot.data();
         setState(() {
           if (data != null) {
             _lessonText = data['lessonText'];
-            _quizData =
-                data['quiz'] is List
-                    ? List<Map<String, dynamic>>.from(data['quiz'])
-                    : null;
-            _suggestedQuestions =
-                data['suggestedQuestions'] is List
-                    ? List<String>.from(data['suggestedQuestions'])
-                    : null;
+            _quizData = data['quiz'] is List ? List<Map<String, dynamic>>.from(data['quiz']) : null;
+            _suggestedQuestions = data['suggestedQuestions'] is List ? List<String>.from(data['suggestedQuestions']) : null;
           } else {
             _lessonText = "Lesson content is empty.";
           }
@@ -135,19 +87,17 @@ class _SubjectScreenState extends State<SubjectScreen> {
         await _completeTopic();
       }
     } catch (e) {
-      final message =
-          e.toString().contains("completed")
-              ? "Wow! You've mastered all the topics in ${widget.subjectName}!"
-              : "An error occurred. Please try again.";
-      setState(() {
-        _lessonText = message;
-        _quizData = null;
-        _isLoading = false;
-      });
+      final message = e.toString().contains("completed") 
+          ? "Wow! You've mastered all the topics in ${widget.subjectName}!"
+          : "An error occurred. Please try again.";
+      setState(() { _lessonText = message; _quizData = null; _isLoading = false; });
       print("Flow ended or error occurred: $e");
     }
   }
 
+  // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  // THE CORRECTED _completeTopic FUNCTION
+  // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   Future<void> _completeTopic() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -157,57 +107,68 @@ class _SubjectScreenState extends State<SubjectScreen> {
         _errorMessage = "Something went wrong, please go back and try again.";
         _isLoading = false;
       });
-      final userDocRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid);
+      return; // Stop execution here
+    }
+
+    try {
+      // 1. Award the badge ID to the user's profile.
+      final userDocRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
       await userDocRef.update({
-        'earnedBadges': FieldValue.arrayUnion([_currentTopicId]),
+        'earnedBadges': FieldValue.arrayUnion([_currentTopicId])
       });
       print("Awarded badge for topic: $_currentTopicId");
 
-      final subjectId = widget.subjectName.toLowerCase();
-      final progressDocRef = userDocRef.collection('progress').doc(subjectId);
+      // 2. Fetch the details of the badge that was just awarded.
+      final badgeDoc = await FirebaseFirestore.instance.collection('badges').doc(_currentTopicId).get();
+      if (badgeDoc.exists) {
+        final badge = Badge(
+          id: badgeDoc.id,
+          name: badgeDoc.data()?['name'] ?? 'New Badge!',
+          imageUrl: badgeDoc.data()?['imageUrl'] ?? '',
+        );
 
-      // THE FIX: We add the completed topic to the subject's progress document.
-      await progressDocRef.update({
-        'completedTopics': FieldValue.arrayUnion([_currentTopicId]),
-      });
-
-      // Reset level to 1 for the next topic
-      await progressDocRef.update({'currentLevel': 1});
-
-      final subjectDoc =
-          await FirebaseFirestore.instance
-              .collection('subjects')
-              .doc(subjectId)
-              .get();
-      if (subjectDoc.data()?['topicOrder'] != null) {
-        await progressDocRef.update({
-          'currentTopicIndex': FieldValue.increment(1),
-        });
+        // 3. Navigate to the BadgeAwardScreen and WAIT for it to close.
+        if (mounted) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => BadgeAwardScreen(badge: badge)),
+          );
+        }
       }
-
-      _fetchCurrentLesson();
+    } catch (e) {
+      print("Error during badge award/display flow: $e");
     }
+
+    // 4. AFTER the badge screen is closed, update the progress for the next topic.
+    final subjectId = widget.subjectName.toLowerCase();
+    final progressDocRef = FirebaseFirestore.instance.collection('users').doc(user.uid).collection('progress').doc(subjectId);
+    
+    await progressDocRef.update({
+      'completedTopics': FieldValue.arrayUnion([_currentTopicId])
+    });
+    await progressDocRef.update({'currentLevel': 1});
+
+    final subjectDoc = await FirebaseFirestore.instance.collection('subjects').doc(subjectId).get();
+    if (subjectDoc.data()?['topicOrder'] != null) {
+      await progressDocRef.update({'currentTopicIndex': FieldValue.increment(1)});
+    }
+
+    // 5. Fetch the next lesson.
+    _fetchCurrentLesson();
   }
 
-  // This function now just increments the level
   Future<void> _levelUp() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     final subjectId = widget.subjectName.toLowerCase();
     final progressDocRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .collection('progress')
-        .doc(subjectId);
+        .collection('users').doc(user.uid).collection('progress').doc(subjectId);
 
     await progressDocRef.update({'currentLevel': FieldValue.increment(1)});
     _fetchCurrentLesson();
   }
 
-  // This is the _launchQuiz function, now at the correct level.
   Future<void> _launchQuiz() async {
     if (_quizData == null || _quizData!.isEmpty) return;
 
@@ -217,8 +178,11 @@ class _SubjectScreenState extends State<SubjectScreen> {
     );
 
     if (passed == true) {
-      await _levelUp();
-      SoundManager.playLevelUpSound();
+      // NOTE: We call _levelUp() here, which just increments the level.
+      // The _fetchCurrentLesson() inside _levelUp will handle detecting if a topic is finished.
+      await _levelUp(); 
+      // The level up sound is now part of the BadgeAwardScreen, so we can remove it from here
+      // to avoid playing it twice.
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Great job! You've reached the next level!"),
@@ -235,9 +199,9 @@ class _SubjectScreenState extends State<SubjectScreen> {
     }
   }
 
-  // This is the build method, now at the correct level.
   @override
   Widget build(BuildContext context) {
+    // This build method is correct and does not need changes.
     return Scaffold(
       appBar: AppBar(
         title: Text("${widget.subjectName} - Level $_currentLevel"),
@@ -248,9 +212,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
           Container(
             decoration: const BoxDecoration(
               image: DecorationImage(
-                image: AssetImage(
-                  "assets/images/subject_screen_background.png",
-                ),
+                image: AssetImage("assets/images/subject_screen_background.png"),
                 fit: BoxFit.cover,
               ),
             ),
@@ -262,18 +224,14 @@ class _SubjectScreenState extends State<SubjectScreen> {
     );
   }
 
-  // This is the _buildLessonContent method, now at the correct level.
   Widget _buildLessonContent() {
+    // This _buildLessonContent method is correct and does not need changes.
     if (_isLoading) {
       return const CircularProgressIndicator();
     } else if (_errorMessage != null) {
       return Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Text(
-          _errorMessage!,
-          style: const TextStyle(color: Colors.red, fontSize: 18),
-          textAlign: TextAlign.center,
-        ),
+        child: Text(_errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 18), textAlign: TextAlign.center),
       );
     } else if (_lessonText != null) {
       return Column(
@@ -283,11 +241,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
             padding: const EdgeInsets.all(24.0),
             child: Text(
               _lessonText!,
-              style: const TextStyle(
-                fontSize: 24,
-                color: Colors.white,
-                shadows: [Shadow(blurRadius: 2, color: Colors.black87)],
-              ),
+              style: const TextStyle(fontSize: 24, color: Colors.white, shadows: [Shadow(blurRadius: 2, color: Colors.black87)]),
               textAlign: TextAlign.center,
             ),
           ),
@@ -296,50 +250,32 @@ class _SubjectScreenState extends State<SubjectScreen> {
             TexturedButton(
               text: "Let's Practice!",
               onPressed: _launchQuiz,
-              texture: ButtonTexture.wood, // Example: use wood texture
+              texture: ButtonTexture.wood,
               fontSize: 20,
-              fixedSize: const Size(400, 100),
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              fixedSize: const Size(280, 70), // Adjusted size for better look
             ),
-
-          const SizedBox(height: 20), // Or adjust spacing as needed
+          const SizedBox(height: 20),
           TextButton.icon(
-            icon: const Icon(
-              Icons.auto_stories_sharp,
-              color: Colors.white,
-            ), // Make icon visible
-            label: const Text(
-              "Ask for Help",
-              style: TextStyle(color: Colors.white),
-            ), // Make text visible
+            icon: const Icon(Icons.support_agent, color: Colors.white),
+            label: const Text("Ask for Help", style: TextStyle(color: Colors.white)),
             onPressed: () {
               SoundManager.playClickSound();
               if (_lessonText != null && _lessonText!.isNotEmpty) {
-                // Ensure there's context
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder:
-                        (context) => ChatScreen(
-                          lessonContext: _lessonText!,
-                          suggestedQuestions: _suggestedQuestions,
-                        ),
+                    builder: (context) => ChatScreen(
+                      lessonContext: _lessonText!,
+                      suggestedQuestions: _suggestedQuestions,
+                    ),
                   ),
                 );
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("No lesson loaded to ask about!"),
-                  ),
+                  const SnackBar(content: Text("No lesson loaded to ask about!")),
                 );
               }
             },
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              // Add a subtle background or shape if it's hard to see on your background
-              // backgroundColor: Colors.black.withOpacity(0.2),
-              // shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
           ),
         ],
       );
