@@ -8,8 +8,6 @@ import 'sound_manager.dart';
 import 'textured_button.dart';
 import 'chat_screen.dart';
 
-List<String>? _suggestedQuestions;
-
 class SubjectScreen extends StatefulWidget {
   final String subjectName;
   const SubjectScreen({super.key, required this.subjectName});
@@ -26,12 +24,15 @@ class _SubjectScreenState extends State<SubjectScreen> {
   int _currentLevel = 1;
   String _currentTopicId = '';
   int _currentTopicIndex = 0; // We still need this for linear subjects
+  List<String>? _suggestedQuestions;
 
   @override
   void initState() {
     super.initState();
     _fetchCurrentLesson();
   }
+
+  // In lib/subject_screen.dart -> _SubjectScreenState
 
   Future<void> _fetchCurrentLesson() async {
     setState(() {
@@ -45,9 +46,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
 
       final subjectId = widget.subjectName.toLowerCase();
 
-      // --- START OF HYBRID LOGIC ---
-
-      // 1. Fetch the main subject document and user progress simultaneously
+      // --- Fetch all necessary data upfront ---
       final userDocFuture =
           FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       final subjectDocFuture =
@@ -67,7 +66,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
       if (!progressSnapshot.exists) throw Exception("Could not find progress.");
       _currentLevel = progressSnapshot.data()?['currentLevel'] ?? 1;
 
-      // 2. Check if a topicOrder exists. This is the main decision point.
+      // --- HYBRID LOGIC DECISION POINT ---
       final topicOrderData = subjectDoc.data()?['topicOrder'];
 
       if (topicOrderData != null &&
@@ -82,26 +81,27 @@ class _SubjectScreenState extends State<SubjectScreen> {
         }
         _currentTopicId = topicOrder[_currentTopicIndex];
       } else {
-        // --- PATH B: Non-Linear "Checklist" Curriculum (Science, World) ---
-        final List<String> earnedBadges = List<String>.from(
-          userDoc.data()?['earnedBadges'] ?? [],
-        );
+        // --- PATH B: Non-Linear (Science/World) - CORRECTED LOGIC ---
         final topicsSnapshot =
             await subjectDoc.reference.collection('topics').get();
+        final allTopicIds = topicsSnapshot.docs.map((doc) => doc.id).toList();
 
-        String? nextTopicId;
-        for (final topicDoc in topicsSnapshot.docs) {
-          if (!earnedBadges.contains(topicDoc.id)) {
-            nextTopicId = topicDoc.id;
-            break;
-          }
-        }
-        if (nextTopicId == null)
+        // THE FIX: We get the completed topics from the *subject's progress document*, not the user's main doc.
+        final List<String> completedTopics = List<String>.from(
+          progressSnapshot.data()?['completedTopics'] ?? [],
+        );
+
+        final availableTopics =
+            allTopicIds
+                .where((topicId) => !completedTopics.contains(topicId))
+                .toList();
+
+        if (availableTopics.isEmpty) {
           throw Exception("All non-linear topics completed!");
-        _currentTopicId = nextTopicId;
+        }
+        _currentTopicId = availableTopics.first;
       }
 
-      // 3. Now that we have the correct topicId, fetch the lesson content
       final levelId = _currentLevel.toString();
       final lessonDocSnapshot =
           await FirebaseFirestore.instance
@@ -116,26 +116,25 @@ class _SubjectScreenState extends State<SubjectScreen> {
       if (lessonDocSnapshot.exists) {
         final data = lessonDocSnapshot.data();
         setState(() {
-          _lessonText = data?['lessonText'];
-          _quizData =
-              data?['quiz'] is List
-                  ? List<Map<String, dynamic>>.from(data?['quiz'])
-                  : null;
-          if (data?['suggestedQuestions'] is List) {
-            _suggestedQuestions = List<String>.from(
-              data?['suggestedQuestions'],
-            );
+          if (data != null) {
+            _lessonText = data['lessonText'];
+            _quizData =
+                data['quiz'] is List
+                    ? List<Map<String, dynamic>>.from(data['quiz'])
+                    : null;
+            _suggestedQuestions =
+                data['suggestedQuestions'] is List
+                    ? List<String>.from(data['suggestedQuestions'])
+                    : null;
           } else {
-            _suggestedQuestions = null; // Or an empty list: [];
+            _lessonText = "Lesson content is empty.";
           }
           _isLoading = false;
         });
       } else {
-        // This means the user finished all levels for the current topic, regardless of path
         await _completeTopic();
       }
     } catch (e) {
-      // A generic catch-all for "You're all done!" or actual errors
       final message =
           e.toString().contains("completed")
               ? "Wow! You've mastered all the topics in ${widget.subjectName}!"
@@ -149,40 +148,47 @@ class _SubjectScreenState extends State<SubjectScreen> {
     }
   }
 
-  // This function now handles completing ANY topic
   Future<void> _completeTopic() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-
-    // Award the badge for the topic they just finished
-    final userDocRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid);
-    await userDocRef.update({
-      'earnedBadges': FieldValue.arrayUnion([_currentTopicId]),
-    });
-    print("Awarded badge for topic: $_currentTopicId");
-
-    // Reset their level to 1 and check if we need to increment the topic index
-    final subjectId = widget.subjectName.toLowerCase();
-    final progressDocRef = userDocRef.collection('progress').doc(subjectId);
-
-    // Check if the subject was linear to decide whether to increment the index
-    final subjectDoc =
-        await FirebaseFirestore.instance
-            .collection('subjects')
-            .doc(subjectId)
-            .get();
-    if (subjectDoc.data()?['topicOrder'] != null) {
-      await progressDocRef.update({
-        'currentTopicIndex': FieldValue.increment(1),
-        'currentLevel': 1,
+    if (_currentTopicId.isEmpty) {
+      print("Error: Tried to complete a topic with an empty ID. Aborting.");
+      setState(() {
+        _errorMessage = "Something went wrong, please go back and try again.";
+        _isLoading = false;
       });
-    } else {
-      await progressDocRef.update({'currentLevel': 1});
-    }
+      final userDocRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid);
+      await userDocRef.update({
+        'earnedBadges': FieldValue.arrayUnion([_currentTopicId]),
+      });
+      print("Awarded badge for topic: $_currentTopicId");
 
-    _fetchCurrentLesson();
+      final subjectId = widget.subjectName.toLowerCase();
+      final progressDocRef = userDocRef.collection('progress').doc(subjectId);
+
+      // THE FIX: We add the completed topic to the subject's progress document.
+      await progressDocRef.update({
+        'completedTopics': FieldValue.arrayUnion([_currentTopicId]),
+      });
+
+      // Reset level to 1 for the next topic
+      await progressDocRef.update({'currentLevel': 1});
+
+      final subjectDoc =
+          await FirebaseFirestore.instance
+              .collection('subjects')
+              .doc(subjectId)
+              .get();
+      if (subjectDoc.data()?['topicOrder'] != null) {
+        await progressDocRef.update({
+          'currentTopicIndex': FieldValue.increment(1),
+        });
+      }
+
+      _fetchCurrentLesson();
+    }
   }
 
   // This function now just increments the level
@@ -242,7 +248,9 @@ class _SubjectScreenState extends State<SubjectScreen> {
           Container(
             decoration: const BoxDecoration(
               image: DecorationImage(
-                image: AssetImage("assets/images/main_background.png"),
+                image: AssetImage(
+                  "assets/images/subject_screen_background.png",
+                ),
                 fit: BoxFit.cover,
               ),
             ),
@@ -297,7 +305,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
           const SizedBox(height: 20), // Or adjust spacing as needed
           TextButton.icon(
             icon: const Icon(
-              Icons.support_agent,
+              Icons.auto_stories_sharp,
               color: Colors.white,
             ), // Make icon visible
             label: const Text(

@@ -49,56 +49,87 @@ class _BadgesScreenState extends State<BadgesScreen> {
     }
   }
 
-  void _showBadgeInfoDialog() {
-    bool doNotShowAgain = false; // Local state for the checkbox
+void _showBadgeInfoDialog() {
+  bool doNotShowAgain = false;
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        // Use StatefulBuilder to manage the checkbox state inside the dialog
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text("Welcome to Your Trophy Room!"),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
+  showDialog(
+    context: context,
+    builder: (context) {
+      // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+      // THE FIX: We use a Dialog widget to allow for a custom shape/background.
+      // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+      return Dialog(
+        backgroundColor: Colors.transparent, // Make the default square background invisible
+        child: Container(
+          padding: const EdgeInsets.all(24.0),
+          decoration: const BoxDecoration(
+            image: DecorationImage(
+              // Use the parchment image as the background for the dialog
+              image: AssetImage("assets/images/parchment_background.png"),
+              fit: BoxFit.fill, // Stretch the image to fill the container
+            ),
+          ),
+          child: StatefulBuilder( // We still need StatefulBuilder for the checkbox
+            builder: (context, setDialogState) {
+              return Column(
+                mainAxisSize: MainAxisSize.min, // Make the column only as tall as its content
                 children: [
+                  const Text(
+                    "Welcome to Your Trophy Room!",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      // Use a dark, parchment-friendly color
+                      color: Color(0xFF5D4037), 
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   const Text(
                     "Here you can see all the cool badges you earn by mastering topics in each subject. "
                     "Keep learning to collect them all!",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Color(0xFF5D4037),
+                    ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 10),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Checkbox(
                         value: doNotShowAgain,
                         onChanged: (bool? value) {
-                          setDialogState(() { // Use setDialogState for dialog's internal state
+                          setDialogState(() {
                             doNotShowAgain = value ?? false;
                           });
                         },
                       ),
-                      const Text("Don't show this again"),
+                      const Text(
+                        "Don't show this again",
+                        style: TextStyle(color: Color(0xFF5D4037)),
+                      ),
                     ],
                   ),
-                ],
+                  const SizedBox(height: 10),
+                  TextButton(
+                    onPressed: () async {
+                      SoundManager.playClickSound();
+                      if (doNotShowAgain) {
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.setBool('showBadgeInfoDialog', false);
+                      }
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text(
+                      "OK",
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () async {
-                    SoundManager.playClickSound();
-                    if (doNotShowAgain) {
-                      final prefs = await SharedPreferences.getInstance();
-                      await prefs.setBool('showBadgeInfoDialog', false);
-                    }
-                    Navigator.of(context).pop();
-                  },
-                  child: const Text("OK"),
-                ),
-              ],
-            );
+                ]);
           },
-        );
+        )));
       },
     );
   }
