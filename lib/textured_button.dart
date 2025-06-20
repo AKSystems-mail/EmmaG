@@ -12,6 +12,7 @@ class TexturedButton extends StatelessWidget {
   final double fontSize;
   final EdgeInsets padding;
   final Size? fixedSize;
+  final TextStyle? textStyle;
 
   const TexturedButton({
     super.key,
@@ -20,7 +21,8 @@ class TexturedButton extends StatelessWidget {
     this.texture = ButtonTexture.stone, // Default to stone
     this.fontSize = 18.0,
     this.padding = const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-    this.fixedSize, 
+    this.fixedSize,
+    this.textStyle, // Add this 
   });
 
   String get _texturePath {
@@ -56,13 +58,14 @@ class TexturedButton extends StatelessWidget {
           child: Center( // Center the text within the button
             child: Text(
               text,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: fontSize,
-                color: Colors.white, // Adjust if your textures need different text color
-                fontWeight: FontWeight.bold,
-                shadows: const [Shadow(blurRadius: 2.0, color: Colors.black54, offset: Offset(1,1))]
-              ),
+      textAlign: TextAlign.center,
+      // Use the provided textStyle, or fall back to a default
+      style: textStyle ?? TextStyle(
+        fontSize: fontSize,
+        color: Colors.white,
+        fontWeight: FontWeight.bold,
+        shadows: const [Shadow(blurRadius: 2.0, color: Colors.black87, offset: Offset(1,1))]
+      ),
           ),
         ),
       ),
