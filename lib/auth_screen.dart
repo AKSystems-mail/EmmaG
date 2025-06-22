@@ -146,7 +146,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         color: Colors.white,
                         fontSize: 36,
                         fontWeight: FontWeight.bold,
-                        fontFamily: 'Nunito',
+                        fontFamily: 'Faculty Glyphic',
                       ),
                     ),
                     const SizedBox(height: 40),

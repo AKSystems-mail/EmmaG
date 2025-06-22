@@ -1,7 +1,9 @@
 // Location: lib/chat_screen.dart
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:cloud_functions/cloud_functions.dart';
+import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'sound_manager.dart';
 
 class ChatMessage {
@@ -30,50 +32,72 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isLoading = false;
 
   // This function calls the backend with a given question string.
-  Future<void> _callCloudFunction(String questionToSend) async {
-    // Ensure we are not already loading
-    if (_isLoading && questionToSend == _textController.text) return; // Avoid double send if user taps quickly
+// In lib/chat_screen.dart, inside _ChatScreenState
 
-    // If the question came from a suggestion, the user message is already added.
-    // If it came from the text field, add it now.
-    if (questionToSend == _textController.text && _textController.text.isNotEmpty) {
-       SoundManager.playClickSound();
-       setState(() {
-        _messages.add(ChatMessage(text: questionToSend, isUser: true));
-      });
-      _textController.clear();
+// This is the single, corrected function.
+  Future<void> _callCloudFunction(String questionToSend) async {
+    if (_isLoading) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      print("CRITICAL ERROR: User is not logged in.");
+      return;
     }
-    
-    setState(() {
-      _isLoading = true;
-    });
+
+    setState(() { _isLoading = true; });
 
     try {
-      final callable = FirebaseFunctions.instance.httpsCallable('askTheTutor');
-      final result = await callable.call<Map<String, dynamic>>({
-        'lessonContext': widget.lessonContext,
-        'userQuestion': questionToSend,
+      // 1. Get a fresh ID token from the user.
+      final idToken = await user.getIdToken(true);
+      const sharedSecret = "AIzaSyBjyGnXFegHgJp_tYhoYkwpzIeXhCwdNgE"; // <-- PASTE HERE
+
+      // 2. Define the exact URL of your Cloud Function.
+      final url = Uri.parse("https://us-central1-emma-g-adventures.cloudfunctions.net/askTheTutor");
+
+      // 3. Manually build the request headers. This is the crucial part.
+      final headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $idToken',
+        'x-shared-secret': sharedSecret, // We explicitly add the auth token.
+      };
+
+      // 4. Manually build the request body.
+      final body = jsonEncode({
+        'data': { // Callable functions expect the data to be inside a 'data' key.
+          'lessonContext': widget.lessonContext,
+          'userQuestion': questionToSend,
+        }
       });
-      final aiResponseText = result.data['answer'] as String? ?? "Sorry, I had a problem thinking.";
-      setState(() {
-        _messages.add(ChatMessage(text: aiResponseText, isUser: false));
-      });
-    } on FirebaseFunctionsException catch (e) {
-      setState(() {
-        _messages.add(ChatMessage(text: "Tutor Error: ${e.message}", isUser: false));
-      });
-      print("Firebase Functions Error: ${e.code} - ${e.message}");
+
+      // 5. Make the HTTP POST request.
+      final response = await http.post(url, headers: headers, body: body);
+
+      // 6. Decode the response.
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        // Callable functions wrap their response in a 'result' key.
+        final aiResponseText = responseData['result']['answer'] as String? ?? "Sorry, I couldn't understand the response.";
+        setState(() {
+          _messages.add(ChatMessage(text: aiResponseText, isUser: false));
+        });
+      } else {
+        // If the server returned an error (like 403, 500, etc.)
+        print("HTTP Error: ${response.statusCode}");
+        print("Response Body: ${response.body}");
+        final errorData = jsonDecode(response.body);
+        final errorMessage = errorData['error']['message'] ?? "An unknown error occurred.";
+        setState(() {
+          _messages.add(ChatMessage(text: "Tutor Error: $errorMessage", isUser: false));
+        });
+      }
     } catch (e) {
+      // Handle any other unexpected errors (like no internet).
       setState(() {
         _messages.add(ChatMessage(text: "An unexpected error occurred.", isUser: false));
       });
       print("Generic Error: $e");
     } finally {
-      if(mounted){ // Check if the widget is still in the tree
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if(mounted){ setState(() { _isLoading = false; }); }
     }
   }
 
