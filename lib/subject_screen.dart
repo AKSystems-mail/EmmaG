@@ -9,6 +9,7 @@ import 'textured_button.dart';
 import 'chat_screen.dart';
 import 'badge_award_screen.dart'; // Make sure this import is here
 import 'badges_screen.dart'; // We need this for the Badge data class
+import 'sound_back_button.dart';
 
 class SubjectScreen extends StatefulWidget {
   final String subjectName;
@@ -204,6 +205,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
     // This build method is correct and does not need changes.
     return Scaffold(
       appBar: AppBar(
+        leading: const SoundBackButton(color: Colors.black),
         title: Text("${widget.subjectName} - Level $_currentLevel"),
         backgroundColor: Colors.green.shade700,
       ),
@@ -256,7 +258,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
             ),
           const SizedBox(height: 20),
           TextButton.icon(
-            icon: const Icon(Icons.support_agent, color: Colors.white),
+            icon: const Icon(Icons.auto_stories_sharp, color: Colors.white),
             label: const Text("Ask for Help", style: TextStyle(color: Colors.white)),
             onPressed: () {
               SoundManager.playClickSound();

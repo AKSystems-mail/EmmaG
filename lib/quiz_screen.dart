@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'sound_manager.dart';
 import 'textured_button.dart';
+import 'sound_back_button.dart';
 
 class QuizScreen extends StatefulWidget {
   final List<Map<String, dynamic>> quizData;
@@ -103,13 +104,13 @@ class _QuizScreenState extends State<QuizScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const SoundBackButton(color: Colors.white),
         // THE FIX: Added style to make text white
         title: Text(
           "Question...",
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.blueGrey.shade700,
-        automaticallyImplyLeading: false,
       ),
       body: Stack(
         children: [

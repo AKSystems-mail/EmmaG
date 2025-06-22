@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'sound_manager.dart'; 
 import 'textured_button.dart';// Make sure you have this import
+import 'sound_back_button.dart';
 
 // BonusChallenge Data Class (This is correct from your file)
 class BonusChallenge {
@@ -285,6 +286,7 @@ class BonusResultsScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const SoundBackButton(color: Colors.white),
         title: const Text("Bonus Level Results!"),
         backgroundColor: Colors.amber.shade800,
         automaticallyImplyLeading: false,
