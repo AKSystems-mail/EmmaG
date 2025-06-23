@@ -102,11 +102,27 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // This is called when the user types and presses send.
-  void _sendMessageFromTextField() {
-    if (_textController.text.isNotEmpty) {
-      _callCloudFunction(_textController.text);
-    }
-  }
+void _sendMessageFromTextField() {
+  // 1. Do nothing if the text field is empty.
+  if (_textController.text.isEmpty) return;
+  
+  // 2. Get the text from the controller.
+  final userMessageText = _textController.text;
+
+  // 3. Play a sound.
+  SoundManager.playClickSound();
+
+  // 4. Add the user's typed message to the UI.
+  setState(() {
+    _messages.add(ChatMessage(text: userMessageText, isUser: true));
+  });
+
+  // 5. Call the backend with the message.
+  _callCloudFunction(userMessageText);
+
+  // 6. Clear the text field for the next message.
+  _textController.clear();
+}
 
   // This is called when a suggested question button is tapped.
   void _sendSuggestedQuestion(String question) {
