@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:audioplayers/audioplayers.dart'; // Import the audio players package
 import 'firebase_options.dart';
 import 'subject_screen.dart';
 import 'auth_screen.dart';
@@ -24,7 +25,7 @@ class EmmaGAdventuresApp extends StatelessWidget {
       title: 'Emma G Adventures',
       theme: ThemeData(
         primarySwatch: Colors.blue,
-        fontFamily: 'Faculty Glyphic',
+        fontFamily: 'Nunito', // Your chosen font
       ),
       home: const AuthGate(),
       debugShowCheckedModeBanner: false,
@@ -51,14 +52,13 @@ class SubjectIconButton extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Use Expanded to make the image fill the available space in the grid cell
           Expanded(child: Image.asset(iconPath, fit: BoxFit.contain)),
           const SizedBox(height: 8),
           Text(
             subjectName,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 16, // Slightly smaller text for better fit
+              fontSize: 16,
               fontWeight: FontWeight.bold,
               shadows: [Shadow(blurRadius: 5.0, color: Colors.black87)],
             ),
@@ -70,10 +70,39 @@ class SubjectIconButton extends StatelessWidget {
 }
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-// THE UPGRADED MAIN MENU SCREEN WITH A ROBUST LAYOUT
+// UPGRADED TO A STATEFULWIDGET FOR MUSIC CONTROL
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-class MainMenuScreen extends StatelessWidget {
+class MainMenuScreen extends StatefulWidget {
   const MainMenuScreen({super.key});
+
+  @override
+  State<MainMenuScreen> createState() => _MainMenuScreenState();
+}
+
+class _MainMenuScreenState extends State<MainMenuScreen> {
+  // Create an audio player instance specifically for the background music
+  final AudioPlayer _musicPlayer = AudioPlayer();
+
+  @override
+  void initState() {
+    super.initState();
+    _playBackgroundMusic();
+  }
+
+  void _playBackgroundMusic() async {
+    // Set the player to loop the audio
+    await _musicPlayer.setReleaseMode(ReleaseMode.loop);
+    // Play the music from your assets
+    await _musicPlayer.play(AssetSource('audio/main_theme.mp3'));
+  }
+
+  @override
+  void dispose() {
+    // It's crucial to stop and dispose of the player when the screen is removed
+    _musicPlayer.stop();
+    _musicPlayer.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -95,49 +124,40 @@ class MainMenuScreen extends StatelessWidget {
           SafeArea(
             child: Column(
               children: [
-                // --- Title Area ---
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24.0),
-                  child: Text(
-                    'Choose Your Adventure!',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      shadows: [
-                        Shadow(blurRadius: 10.0, color: Colors.black54),
-                      ],
-                    ),
+                // --- NEW: Title Area with Image ---
+                Padding(
+                  padding: const EdgeInsets.only(top: 40.0), // Add top padding
+                  child: SizedBox(
+                    height: 150, // Give the title image a defined height
+                    child: Image.asset("assets/images/EGA_title.png"),
                   ),
                 ),
+                const Text(
+                  'Choose Your Adventure!',
+                  style: TextStyle(
+                    fontSize: 22, // Smaller font size
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    shadows: [Shadow(blurRadius: 10.0, color: Colors.black54)],
+                  ),
+                ),
+                const SizedBox(height: 20), // Adjust spacing
 
                 // --- The Grid of Icons ---
-                // Expanded tells the GridView to fill all available vertical space
                 Expanded(
                   child: GridView.count(
-                    crossAxisCount:
-                        3, // We use 3 columns to fit everything nicely
+                    crossAxisCount: 3,
                     padding: const EdgeInsets.symmetric(horizontal: 16.0),
                     crossAxisSpacing: 16,
                     mainAxisSpacing: 16,
                     physics: const NeverScrollableScrollPhysics(),
                     children: [
-                      // AFTER: Using block syntax to perform two actions
                       SubjectIconButton(
                         iconPath: "assets/images/math_icon.png",
                         subjectName: "Math",
                         onTap: () {
-                          // 1. Play the sound first.
                           SoundManager.playClickSound();
-                          // 2. Then, navigate to the new screen.
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) =>
-                                      const SubjectScreen(subjectName: "Math"),
-                            ),
-                          );
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const SubjectScreen(subjectName: "Math")));
                         },
                       ),
                       SubjectIconButton(
@@ -145,15 +165,7 @@ class MainMenuScreen extends StatelessWidget {
                         subjectName: "Reading",
                         onTap: () {
                           SoundManager.playClickSound();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) => const SubjectScreen(
-                                    subjectName: "Reading",
-                                  ),
-                            ),
-                          );
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const SubjectScreen(subjectName: "Reading")));
                         },
                       ),
                       SubjectIconButton(
@@ -161,15 +173,7 @@ class MainMenuScreen extends StatelessWidget {
                         subjectName: "Science",
                         onTap: () {
                           SoundManager.playClickSound();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) => const SubjectScreen(
-                                    subjectName: "Science",
-                                  ),
-                            ),
-                          );
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const SubjectScreen(subjectName: "Science")));
                         },
                       ),
                       SubjectIconButton(
@@ -177,14 +181,7 @@ class MainMenuScreen extends StatelessWidget {
                         subjectName: "World",
                         onTap: () {
                           SoundManager.playClickSound();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) =>
-                                      const SubjectScreen(subjectName: "World"),
-                            ),
-                          );
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const SubjectScreen(subjectName: "World")));
                         },
                       ),
                       SubjectIconButton(
@@ -192,70 +189,62 @@ class MainMenuScreen extends StatelessWidget {
                         subjectName: "Bonus!",
                         onTap: () {
                           SoundManager.playClickSound();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const BonusLevelScreen(),
-                            ),
-                          );
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const BonusLevelScreen()));
                         },
                       ),
                     ],
-                  ),
-                ),
-
-                // --- Character Area ---
-                Align(
-                  alignment: Alignment.bottomLeft,
-                  child: Container(
-                    height: 200, // Adjusted height
-                    child: Image.asset(
-                      "assets/images/emma_character_transparent.png",
-                      fit: BoxFit.contain,
-                    ),
                   ),
                 ),
               ],
             ),
           ),
 
-          // 3. The "My Badges" Button (Top Right)
-          // Positioned gives us explicit control over size and placement
-          Positioned(
-            top: 510, // Adjust top position to accommodate the text
-            right: 5,
-            child: Column(
-              // Use a Column to stack the icon and text
-              mainAxisSize:
-                  MainAxisSize.min, // Make the column as small as possible
-              children: [
-                SizedBox(
-                  width: 120, // Explicit size for the button
-                  height: 120,
-                  child: IconButton(
-                    padding: EdgeInsets.zero, // Remove default padding
-                    icon: Image.asset("assets/images/trophy_icon.png"),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const BadgesScreen(),
-                        ),
-                      );
-                    },
+          // 3. The Character Image (Bottom Left)
+          Align(
+            alignment: Alignment.bottomLeft,
+            child: Container(
+              height: 250, // Adjusted height
+              child: Image.asset(
+                "assets/images/emma_character_transparent.png",
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+
+          // 4. The "My Badges" Button (Bottom Right)
+          Align(
+            alignment: Alignment.bottomRight,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 24.0, bottom: 24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 100, // Explicit size for the button
+                    height: 100,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: Image.asset("assets/images/trophy_icon.png"),
+                      onPressed: () {
+                        SoundManager.playClickSound();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const BadgesScreen()),
+                        );
+                      },
+                    ),
                   ),
-                ),
-                const SizedBox(
-                  height: 8,
-                ), // Add some space between the icon and text
-                const Text(
-                  "Trophies",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+                  const SizedBox(height: 4),
+                  const Text(
+                    "Trophies",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      shadows: [Shadow(blurRadius: 2, color: Colors.black87)],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],

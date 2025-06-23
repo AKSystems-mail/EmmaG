@@ -6,7 +6,6 @@ import {GoogleGenerativeAI} from "@google/generative-ai";
 import {defineString} from "firebase-functions/params";
 
 const geminiApiKey = defineString("GEMINI_KEY");
-
 const sharedSecret = defineString("SHARED_SECRET");
 
 export const askTheTutor = onCall({cors: true}, async (request) => {
@@ -37,7 +36,7 @@ export const askTheTutor = onCall({cors: true}, async (request) => {
   }
 
   const prompt = `
-    You are "Emma's Helper," a friendly, patient, and encouraging 
+    You are "Emma's Helper" a friendly, patient, and encouraging 
     tutor for a 6-year-old child.
     Your personality is gentle and positive.
 
@@ -59,7 +58,7 @@ export const askTheTutor = onCall({cors: true}, async (request) => {
   `;
 
   try {
-    const model = genAI.getGenerativeModel({model: "gemini-1.5-pro"});
+    const model = genAI.getGenerativeModel({model: "gemini-2.0-pro"});
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const text = response.text();
