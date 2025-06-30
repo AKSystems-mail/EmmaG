@@ -1,14 +1,15 @@
 {
   "compilerOptions": {
-    "module": "NodeNext",
-    "esModuleInterop": true,
-    "moduleResolution": "nodenext",
-    "noImplicitReturns": true,
-    "noUnusedLocals": true,
-    "outDir": "lib",
+    "module": "NodeNext", // This is the key change for modern ES Modules
+    "moduleResolution": "NodeNext", // Works with the above setting
+    "target": "es2021", // A modern and compatible JavaScript version
     "sourceMap": true,
+    "outDir": "lib",
     "strict": true,
-    "target": "es2017"
+    "lib": ["es2021"],
+    "esModuleInterop": true,
+    "skipLibCheck": true, // Skips type checking of declaration files in node_modules
+    "forceConsistentCasingInFileNames": true
   },
   "compileOnSave": true,
   "include": [

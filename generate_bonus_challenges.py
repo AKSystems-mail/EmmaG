@@ -42,7 +42,7 @@ def generate_single_bonus_challenge(challenge_number, difficulty_score):
     - "explanationText": "(String, Optional) A brief, kid-friendly explanation (1 sentence) of why the correct answer is right. Only include if truly helpful."
     """
     
-    model = genai.GenerativeModel('gemini-1.5-pro')
+    model = genai.GenerativeModel('gemini-2.0-flash')
     response = model.generate_content(prompt)
     
     cleaned_response_text = response.text.strip().replace("```json", "").replace("```", "")

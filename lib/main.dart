@@ -13,6 +13,7 @@ import 'sound_manager.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await SoundManager.initializeTts();
   runApp(const EmmaGAdventuresApp());
 }
 
