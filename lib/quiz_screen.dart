@@ -25,6 +25,7 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   void _loadAndShuffleOptions() {
+    if (widget.quizData.isEmpty || _currentQuestionIndex >= widget.quizData.length) return;
     final currentQuestionData = widget.quizData[_currentQuestionIndex];
     if (currentQuestionData['options'] != null && currentQuestionData['options'] is List) {
       List<String> options = List<String>.from(currentQuestionData['options']);
@@ -40,6 +41,7 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   void _answerQuestion(String selectedAnswer) {
+    SoundManager.playClickSound(); // Play click sound for consistency
     final correctAnswer = widget.quizData[_currentQuestionIndex]['correctAnswer'];
     bool isCorrect = selectedAnswer == correctAnswer;
 
@@ -48,13 +50,12 @@ class _QuizScreenState extends State<QuizScreen> {
       SoundManager.playCorrectSound();
     }
 
-    // --- NEW PARCHMENT DIALOG ---
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        return Dialog( // Use Dialog for custom shape
-          backgroundColor: Colors.transparent, // Make default background transparent
+        return Dialog(
+          backgroundColor: Colors.transparent,
           child: Container(
             padding: const EdgeInsets.all(24.0),
             decoration: const BoxDecoration(
@@ -99,15 +100,20 @@ class _QuizScreenState extends State<QuizScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.quizData.isEmpty) return const Scaffold(body: Center(child: Text("No questions.")));
+    if (widget.quizData.isEmpty || _currentQuestionIndex >= widget.quizData.length) {
+      return Scaffold(
+        appBar: AppBar(title: const Text("Quiz"), leading: const SoundBackButton()),
+        body: const Center(child: Text("No questions available or quiz finished.")),
+      );
+    }
     final currentQuestion = widget.quizData[_currentQuestionIndex];
+    final questionText = currentQuestion['question'] as String? ?? "No question text.";
 
     return Scaffold(
       appBar: AppBar(
         leading: const SoundBackButton(color: Colors.white),
-        // THE FIX: Added style to make text white
         title: Text(
-          "Question...",
+          "Question ${_currentQuestionIndex + 1}/${widget.quizData.length}",
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.blueGrey.shade700,
@@ -125,10 +131,28 @@ class _QuizScreenState extends State<QuizScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      currentQuestion['question'],
-                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
-                      textAlign: TextAlign.center,
+                    // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+                    // THE FIX: The Row containing the question and speaker icon
+                    // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            questionText,
+                            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white, shadows: [Shadow(blurRadius: 2, color: Colors.black87)]),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                        IconButton(
+                          icon: Image.asset("assets/images/speaker_icon.png"),
+                          iconSize: 36,
+                          onPressed: () {
+                            SoundManager.speak(questionText);
+                          },
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 40),
                     Column(
@@ -141,7 +165,6 @@ class _QuizScreenState extends State<QuizScreen> {
                             texture: ButtonTexture.stone,
                             fontSize: 18,
                             fixedSize: const Size(280, 70),
-                            // THE FIX: Added drop shadow to button text
                             textStyle: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,

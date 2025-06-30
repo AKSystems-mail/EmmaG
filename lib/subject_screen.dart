@@ -226,27 +226,45 @@ class _SubjectScreenState extends State<SubjectScreen> {
     );
   }
 
-  Widget _buildLessonContent() {
-    // This _buildLessonContent method is correct and does not need changes.
-    if (_isLoading) {
-      return const CircularProgressIndicator();
-    } else if (_errorMessage != null) {
-      return Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Text(_errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 18), textAlign: TextAlign.center),
-      );
-    } else if (_lessonText != null) {
-      return Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Text(
-              _lessonText!,
-              style: const TextStyle(fontSize: 24, color: Colors.white, shadows: [Shadow(blurRadius: 2, color: Colors.black87)]),
-              textAlign: TextAlign.center,
-            ),
+Widget _buildLessonContent() {
+  if (_isLoading) {
+    return const CircularProgressIndicator();
+  } else if (_errorMessage != null) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Text(_errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 18), textAlign: TextAlign.center),
+    );
+  } else if (_lessonText != null) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          // THE FIX: Wrap the Text and the new Button in a Row
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Expanded makes the text wrap correctly if it's long
+              Expanded(
+                child: Text(
+                  _lessonText!,
+                  style: const TextStyle(fontSize: 24, color: Colors.white, shadows: [Shadow(blurRadius: 2, color: Colors.black87)]),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              // The new "Read Aloud" button
+              IconButton(
+                icon: Image.asset("assets/images/speaker_icon.png"), // Your custom icon
+                iconSize: 36,
+                onPressed: () {
+                  // When tapped, it calls our new SoundManager function
+                  SoundManager.speak(_lessonText!);
+                },
+              ),
+            ],
           ),
+        ),
           const SizedBox(height: 40),
           if (_quizData != null)
             TexturedButton(
