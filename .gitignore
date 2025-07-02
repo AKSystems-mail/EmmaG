@@ -43,5 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/key.properties
 # Ignore Firebase service account key
 service-account-key.json
