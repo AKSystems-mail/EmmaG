@@ -99,6 +99,13 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   @override
+  void dispose() {
+    // Stop any speech when the screen is disposed
+    SoundManager.stop();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     if (widget.quizData.isEmpty || _currentQuestionIndex >= widget.quizData.length) {
       return Scaffold(

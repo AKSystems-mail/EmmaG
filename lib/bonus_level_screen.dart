@@ -158,6 +158,13 @@ class _BonusLevelScreenState extends State<BonusLevelScreen> {
   }
 
   @override
+  void dispose() {
+    // Stop any speech when the screen is disposed
+    SoundManager.stop();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(

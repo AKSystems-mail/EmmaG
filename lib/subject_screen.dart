@@ -201,6 +201,13 @@ class _SubjectScreenState extends State<SubjectScreen> {
   }
 
   @override
+  void dispose() {
+    // Stop any speech when the screen is disposed
+    SoundManager.stop();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     // This build method is correct and does not need changes.
     return Scaffold(
