@@ -13,9 +13,11 @@ class SoundBackButton extends StatelessWidget {
     return IconButton(
       icon: Icon(Icons.arrow_back, color: color),
       onPressed: () {
-        // Play the click sound first
+        // 1. Stop any playing speech FIRST.
+        SoundManager.stop();
+        // 2. Then, play the click sound.
         SoundManager.playClickSound();
-        // Then, pop the current screen to go back
+        // 3. Finally, navigate back.
         Navigator.of(context).pop();
       },
     );

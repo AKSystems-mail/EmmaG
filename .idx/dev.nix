@@ -5,6 +5,7 @@
 
   # We only need the base Python package.
   packages = [
+    pkgs.apt
     pkgs.jdk17
     pkgs.unzip
     pkgs.python312
