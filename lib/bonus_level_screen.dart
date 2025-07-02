@@ -2,11 +2,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'sound_manager.dart'; 
-import 'textured_button.dart';// Make sure you have this import
+import 'sound_manager.dart';
+import 'textured_button.dart';
 import 'sound_back_button.dart';
 
-// BonusChallenge Data Class (This is correct from your file)
+// BonusChallenge Data Class (This is correct and does not need changes)
 class BonusChallenge {
   final String id;
   final int difficultyScore;
@@ -51,6 +51,8 @@ class BonusLevelScreen extends StatefulWidget {
 }
 
 class _BonusLevelScreenState extends State<BonusLevelScreen> {
+  // All state variables and functions from initState to _nextChallenge
+  // are correct and do not need changes.
   bool _isLoading = true;
   List<BonusChallenge> _challenges = [];
   int _currentChallengeIndex = 0;
@@ -64,8 +66,6 @@ class _BonusLevelScreenState extends State<BonusLevelScreen> {
   }
 
   Future<void> _fetchBonusChallenges() async {
-    // This function is correct from your file and does not need changes.
-    // It fetches, orders (or shuffles), and stores the challenges.
     try {
       final snapshot = await FirebaseFirestore.instance
           .collection('bonus_level')
@@ -88,70 +88,64 @@ class _BonusLevelScreenState extends State<BonusLevelScreen> {
     }
   }
 
-  // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-  // UPDATED: _submitAnswer function with sound and delay
-  // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   void _submitAnswer(String selectedAnswer) {
-    SoundManager.playClickSound(); // Play click sound on any answer
-
+    SoundManager.playClickSound();
     final currentChallenge = _challenges[_currentChallengeIndex];
     bool isCorrect = selectedAnswer == currentChallenge.correctAnswer;
 
     if (isCorrect) {
       _bonusScore++;
-      SoundManager.playCorrectSound(); // Play correct sound if right
+      SoundManager.playCorrectSound();
     }
 
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) {
-      return Dialog(
-        backgroundColor: Colors.transparent,
-        child: Container(
-          padding: const EdgeInsets.all(24.0),
-          decoration: const BoxDecoration(
-            image: DecorationImage(
-              image: AssetImage("assets/images/parchment_background.png"),
-              fit: BoxFit.fill,
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(24.0),
+            decoration: const BoxDecoration(
+              image: DecorationImage(
+                image: AssetImage("assets/images/parchment_background.png"),
+                fit: BoxFit.fill,
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(isCorrect ? "Awesome!" : "Not Quite!", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF5D4037))),
+                const SizedBox(height: 16),
+                Text("The correct answer was: ${currentChallenge.correctAnswer}", style: const TextStyle(fontSize: 18, color: Color(0xFF5D4037))),
+                if (currentChallenge.explanationText != null && currentChallenge.explanationText!.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text("Here's why: ${currentChallenge.explanationText}", style: const TextStyle(fontSize: 16, color: Color(0xFF5D4037))),
+                ],
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    Future.delayed(const Duration(milliseconds: 400), () => _nextChallenge());
+                  },
+                  child: const Text("Next", style: TextStyle(fontSize: 18)),
+                ),
+              ],
             ),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(isCorrect ? "Awesome!" : "Not Quite!", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF5D4037))),
-              const SizedBox(height: 16),
-              Text("The correct answer was: ${currentChallenge.correctAnswer}", style: const TextStyle(fontSize: 18, color: Color(0xFF5D4037))),
-              if (currentChallenge.explanationText != null && currentChallenge.explanationText!.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Text("Here's why: ${currentChallenge.explanationText}", style: const TextStyle(fontSize: 16, color: Color(0xFF5D4037))),
-              ],
-              const SizedBox(height: 16),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  Future.delayed(const Duration(milliseconds: 400), () => _nextChallenge());
-                },
-                child: const Text("Next", style: TextStyle(fontSize: 18)),
-              ),
-          ],
-        )));
+        );
       },
     );
   }
 
-  // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-  // UPDATED: _nextChallenge function to navigate to Results Screen
-  // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   void _nextChallenge() {
     if (_currentChallengeIndex < _challenges.length - 1) {
       setState(() {
         _currentChallengeIndex++;
       });
     } else {
-      // Bonus level is over, navigate to the Results Screen
-      Navigator.of(context).pop(); // Pop the BonusLevelScreen itself
-      Navigator.pushReplacement( // Use pushReplacement so back button doesn't return to quiz
+      Navigator.of(context).pop();
+      Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           builder: (context) => BonusResultsScreen(
@@ -163,41 +157,38 @@ class _BonusLevelScreenState extends State<BonusLevelScreen> {
     }
   }
 
-  // build and _buildContent methods are correct from your file
-@override
-Widget build(BuildContext context) {
-  return Scaffold(
-    appBar: AppBar(
-      title: const Text("STEM Bonus Challenge"),
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        // THE FIX: Added the SoundBackButton
+        leading: const SoundBackButton(color: Colors.white),
+        title: const Text("STEM Bonus Challenge"),
         titleTextStyle: const TextStyle(
-    color: Colors.white,
-    fontSize: 22, // A bit larger for a main title
-    fontWeight: FontWeight.bold,
-    fontFamily: 'Faculty Glyphic', // Ensure your custom font is applied here too!
-    shadows: [Shadow(blurRadius: 1, color: Colors.black54)] // Optional: a subtle shadow
-  ),
-      backgroundColor: Colors.indigo.shade700,
-    ),
-    // THE FIX: Wrap the body in a Stack to add the background
-    body: Stack(
-      children: [
-        // Background Image
-        Container(
-          decoration: const BoxDecoration(
-            image: DecorationImage(
-              image: AssetImage("assets/images/bonus_level_background.png"), // Your new background
-              fit: BoxFit.cover,
+          color: Colors.white,
+          fontSize: 22,
+          fontWeight: FontWeight.bold,
+          fontFamily: 'Nunito', // Your custom font
+          shadows: [Shadow(blurRadius: 1, color: Colors.black54)]
+        ),
+        backgroundColor: Colors.indigo.shade700,
+      ),
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              image: DecorationImage(
+                image: AssetImage("assets/images/bonus_level_background.png"),
+                fit: BoxFit.cover,
+              ),
             ),
           ),
-        ),
-        // Overlay
-        Container(color: Colors.black.withOpacity(0.4)),
-        // Your existing _buildContent() call
-        _buildContent(),
-      ],
-    ),
-  );
-}
+          Container(color: Colors.black.withOpacity(0.4)),
+          _buildContent(),
+        ],
+      ),
+    );
+  }
 
   Widget _buildContent() {
     if (_isLoading) {
@@ -226,30 +217,44 @@ Widget build(BuildContext context) {
             children: [
               Text(
                 "Challenge ${challenge.difficultyScore}/${_challenges.length}",
-                // THE FIX: Added white color and shadow for readability
                 style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.8), shadows: const [Shadow(blurRadius: 1, color: Colors.black)]),
               ),
               const SizedBox(height: 8),
               Text(
                 "Subjects: ${challenge.subjectsInvolved.join(' & ')}",
-                 // THE FIX: Added white color and shadow for readability
                  style: TextStyle(fontSize: 16, fontStyle: FontStyle.italic, color: Colors.white.withOpacity(0.9), shadows: const [Shadow(blurRadius: 1, color: Colors.black)]),
               ),
               const SizedBox(height: 20),
-              Text(
-                challenge.promptText,
-                // THE FIX: Added white color and shadow for readability
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white, shadows: [Shadow(blurRadius: 2, color: Colors.black87)]),
-                textAlign: TextAlign.center,
+              // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+              // THE FIX: Added the Row with the speaker icon here
+              // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      challenge.promptText,
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white, shadows: [Shadow(blurRadius: 2, color: Colors.black87)]),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  IconButton(
+                    icon: Image.asset("assets/images/speaker_icon.png"),
+                    iconSize: 36,
+                    onPressed: () {
+                      SoundManager.speak(challenge.promptText);
+                    },
+                  ),
+                ],
               ),
               const SizedBox(height: 40),
-              // THE FIX: Replaced ElevatedButton with our styled TexturedButton
               ...challenge.options.map((option) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8.0),
                 child: TexturedButton(
                   text: option,
                   onPressed: () => _submitAnswer(option),
-                  texture: ButtonTexture.stone, // Using the stone texture
+                  texture: ButtonTexture.stone,
                   fixedSize: const Size(280, 70),
                   textStyle: const TextStyle(
                     color: Colors.white,
@@ -257,19 +262,17 @@ Widget build(BuildContext context) {
                     fontWeight: FontWeight.bold,
                     shadows: [Shadow(blurRadius: 2.0, color: Colors.black87, offset: Offset(1, 1))]
                   ),
+                ),
               )),
-              ),
             ],
+          ),
         ),
       ),
-    ));
+    );
   }
 }
 
-
-// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-// NEW WIDGET: The Bonus Results Screen (Added at the end of the file)
-// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+// BonusResultsScreen does not need changes, but is included for completeness.
 class BonusResultsScreen extends StatelessWidget {
   final int score;
   final int totalQuestions;
@@ -289,7 +292,6 @@ class BonusResultsScreen extends StatelessWidget {
         leading: const SoundBackButton(color: Colors.white),
         title: const Text("Bonus Level Results!"),
         backgroundColor: Colors.amber.shade800,
-        automaticallyImplyLeading: false,
       ),
       body: Center(
         child: Padding(
@@ -321,16 +323,13 @@ class BonusResultsScreen extends StatelessWidget {
                 style: TextStyle(fontSize: 20, color: Colors.grey.shade700, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 40),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                  textStyle: const TextStyle(fontSize: 20),
-                ),
+              TexturedButton(
+                text: "Back to Menu",
                 onPressed: () {
-                  SoundManager.playClickSound();
-                  Navigator.of(context).pop(); // Go back to Main Menu
+                  Navigator.of(context).pop();
                 },
-                child: const Text("Back to Menu"),
+                texture: ButtonTexture.wood,
+                fontSize: 20,
               )
             ],
           ),

@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:audioplayers/audioplayers.dart'; // Import the audio players package
+import 'package:audioplayers/audioplayers.dart';
 import 'firebase_options.dart';
 import 'subject_screen.dart';
 import 'auth_screen.dart';
@@ -24,10 +24,7 @@ class EmmaGAdventuresApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Emma G Adventures',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        fontFamily: 'Nunito', // Your chosen font
-      ),
+      theme: ThemeData(primarySwatch: Colors.blue, fontFamily: 'Nunito'),
       home: const AuthGate(),
       debugShowCheckedModeBanner: false,
     );
@@ -70,9 +67,6 @@ class SubjectIconButton extends StatelessWidget {
   }
 }
 
-// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-// UPGRADED TO A STATEFULWIDGET FOR MUSIC CONTROL
-// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 class MainMenuScreen extends StatefulWidget {
   const MainMenuScreen({super.key});
 
@@ -81,8 +75,33 @@ class MainMenuScreen extends StatefulWidget {
 }
 
 class _MainMenuScreenState extends State<MainMenuScreen> {
-  // Create an audio player instance specifically for the background music
   final AudioPlayer _musicPlayer = AudioPlayer();
+  // ADDED: State variable to track if music is on or off
+  bool _isMusicOn = true;
+
+  // This is the standard color matrix for converting an image to grayscale.
+  static const List<double> _grayscaleMatrix = <double>[
+    0.2126,
+    0.7152,
+    0.0722,
+    0,
+    0,
+    0.2126,
+    0.7152,
+    0.0722,
+    0,
+    0,
+    0.2126,
+    0.7152,
+    0.0722,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+  ];
 
   @override
   void initState() {
@@ -91,15 +110,24 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
   }
 
   void _playBackgroundMusic() async {
-    // Set the player to loop the audio
     await _musicPlayer.setReleaseMode(ReleaseMode.loop);
-    // Play the music from your assets
     await _musicPlayer.play(AssetSource('audio/main_theme.mp3'));
+  }
+
+  // ADDED: Function to toggle the music on and off
+  void _toggleMusic() {
+    setState(() {
+      _isMusicOn = !_isMusicOn;
+      if (_isMusicOn) {
+        _musicPlayer.resume();
+      } else {
+        _musicPlayer.pause();
+      }
+    });
   }
 
   @override
   void dispose() {
-    // It's crucial to stop and dispose of the player when the screen is removed
     _musicPlayer.stop();
     _musicPlayer.dispose();
     super.dispose();
@@ -125,26 +153,23 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
           SafeArea(
             child: Column(
               children: [
-                // --- NEW: Title Area with Image ---
                 Padding(
-                  padding: const EdgeInsets.only(top: 40.0), // Add top padding
+                  padding: const EdgeInsets.only(top: 40.0),
                   child: SizedBox(
-                    height: 150, // Give the title image a defined height
+                    height: 150,
                     child: Image.asset("assets/images/EGA_title.png"),
                   ),
                 ),
                 const Text(
                   'Choose Your Adventure!',
                   style: TextStyle(
-                    fontSize: 22, // Smaller font size
+                    fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                     shadows: [Shadow(blurRadius: 10.0, color: Colors.black54)],
                   ),
                 ),
-                const SizedBox(height: 20), // Adjust spacing
-
-                // --- The Grid of Icons ---
+                const SizedBox(height: 20),
                 Expanded(
                   child: GridView.count(
                     crossAxisCount: 3,
@@ -158,7 +183,14 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                         subjectName: "Math",
                         onTap: () {
                           SoundManager.playClickSound();
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const SubjectScreen(subjectName: "Math")));
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) =>
+                                      const SubjectScreen(subjectName: "Math"),
+                            ),
+                          );
                         },
                       ),
                       SubjectIconButton(
@@ -166,7 +198,15 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                         subjectName: "Reading",
                         onTap: () {
                           SoundManager.playClickSound();
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const SubjectScreen(subjectName: "Reading")));
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) => const SubjectScreen(
+                                    subjectName: "Reading",
+                                  ),
+                            ),
+                          );
                         },
                       ),
                       SubjectIconButton(
@@ -174,7 +214,15 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                         subjectName: "Science",
                         onTap: () {
                           SoundManager.playClickSound();
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const SubjectScreen(subjectName: "Science")));
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) => const SubjectScreen(
+                                    subjectName: "Science",
+                                  ),
+                            ),
+                          );
                         },
                       ),
                       SubjectIconButton(
@@ -182,7 +230,14 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                         subjectName: "World",
                         onTap: () {
                           SoundManager.playClickSound();
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const SubjectScreen(subjectName: "World")));
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) =>
+                                      const SubjectScreen(subjectName: "World"),
+                            ),
+                          );
                         },
                       ),
                       SubjectIconButton(
@@ -190,7 +245,12 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                         subjectName: "Bonus!",
                         onTap: () {
                           SoundManager.playClickSound();
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const BonusLevelScreen()));
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const BonusLevelScreen(),
+                            ),
+                          );
                         },
                       ),
                     ],
@@ -204,7 +264,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
           Align(
             alignment: Alignment.bottomLeft,
             child: Container(
-              height: 250, // Adjusted height
+              height: 250,
               child: Image.asset(
                 "assets/images/emma_character_transparent.png",
                 fit: BoxFit.contain,
@@ -221,8 +281,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SizedBox(
-                    width: 100, // Explicit size for the button
-                    height: 100,
+                    width: 80,
+                    height: 80,
                     child: IconButton(
                       padding: EdgeInsets.zero,
                       icon: Image.asset("assets/images/trophy_icon.png"),
@@ -230,7 +290,9 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                         SoundManager.playClickSound();
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => const BadgesScreen()),
+                          MaterialPageRoute(
+                            builder: (context) => const BadgesScreen(),
+                          ),
                         );
                       },
                     ),
@@ -245,6 +307,52 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                     ),
                   ),
                 ],
+              ),
+            ),
+          ),
+
+          // 5. THE CORRECTED MUSIC TOGGLE BUTTON (TOP RIGHT)
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topRight,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 60,
+                      height: 60,
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        onPressed: _toggleMusic,
+                        // This is the corrected conditional logic for the icon
+                        icon:
+                            _isMusicOn
+                                ? Image.asset("assets/images/speaker_icon.png")
+                                : ColorFiltered(
+                                  colorFilter: const ColorFilter.matrix(
+                                    _grayscaleMatrix,
+                                  ),
+                                  child: Image.asset(
+                                    "assets/images/speaker_icon.png",
+                                  ),
+                                ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "Music",
+                      style: TextStyle(
+                        color: _isMusicOn ? Colors.white : Colors.grey.shade400,
+                        fontWeight: FontWeight.bold,
+                        shadows: const [
+                          Shadow(blurRadius: 2, color: Colors.black87),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
