@@ -31,9 +31,6 @@ SCIENCE_CURRICULUM = [
 
 # --- THE SCRIPT ---
 
-def generate_lesson_content(topic_name, subject, difficulty_code, level_number):
-    """Generates content for a single lesson using the Gemini API."""
-    
     prompt = f"""
     You are an expert curriculum developer and a fun, engaging 1st-grade teacher with a PhD in childhood education.
     Your task is to generate a lesson and a multiple-choice quiz for a specific level in an educational app.
@@ -41,15 +38,20 @@ def generate_lesson_content(topic_name, subject, difficulty_code, level_number):
     **Your Persona:**
     - Your tone is encouraging, gentle, and full of wonder.
     - You explain concepts by using simple, real-world analogies that a 6-year-old can relate to.
-    - You avoid overly simplistic or repetitive phrasing. Each level should feel fresh.
+    - You avoid overly simplistic or repetitive phrasing. Each level should feel fresh and unique.
 
     **Topic:** {topic_name}
     **Subject:** {subject}
     **Current Level:** {level_number} out of 10 
     **Difficulty Code:** {difficulty_code}
 
+    **CRITICAL RULES FOR THIS TASK:**
+    1.  **Analogy Variety:** You MUST use a completely different real-world analogy or scenario for each level. For example, if the topic is addition, do not use "apples" or "bouncy balls" multiple times. Use scenarios involving building blocks, animal friends, cookies, stickers, etc.
+    2.  **Phrasing Variety:** You MUST avoid starting every lesson with "Imagine you have...". Use different sentence structures to introduce the concept. For example: "What happens when...", "Let's think about...", "Counting is fun! If...".
+    3.  **Difficulty Scaling:** The lesson text and quiz question for level {level_number} MUST be slightly more complex or introduce a new element compared to the previous level. For example, for addition, early levels might be 1+1, while later levels could be 4+5.
+
     **Instructions:**
-    1.  **Lesson Text:** Write a simple, one or two-sentence explanation of the topic. Since this is level {level_number}/10, make the concept slightly more complex than a beginner level, but not overly difficult. Start with a relatable example.
+    1.  **Lesson Text:** Write a simple, one or two-sentence explanation of the topic, following all the rules above.
     2.  **Quiz:** Create ONE multiple-choice quiz question that directly tests the concept from the lesson text.
     3.  **JSON Output:** Provide the output as a single, raw JSON object with NO explanatory text or markdown.
 
@@ -58,7 +60,7 @@ def generate_lesson_content(topic_name, subject, difficulty_code, level_number):
     - "difficulty": (Number) The difficulty code I provided.
     - "quiz": (Array of 1 Map Object)
         - "question": (String) The quiz question.
-        - "options": (Array of 4 Strings) The answer choices. Ensure one is clearly correct and the others are plausible but incorrect "distractors."
+        - "options": (Array of 4 Strings) The answer choices.
         - "correctAnswer": (String) The correct answer, which must exactly match one of the options.
     - "suggestedQuestions": (Array of 2-3 Strings) Simple, relevant questions a child might ask about this lesson text.
     """
