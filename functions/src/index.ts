@@ -71,7 +71,7 @@ export const synthesizeSpeech = onCall(async (request) => {
   const ttsRequest:
   textToSpeech.protos.google.cloud.texttospeech.v1.ISynthesizeSpeechRequest = {
     input: {text: text},
-    voice: {languageCode: "en-US", name: "en-US-Wavenet-D"},
+    voice: {languageCode: "en-US", name: "en-US-Chirp3-HD-Callirrhoe"},
     // The type now explicitly matches what the library expects.
     audioConfig: {audioEncoding: "MP3"},
   };
