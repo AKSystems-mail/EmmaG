@@ -5,10 +5,11 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'firebase_options.dart';
 import 'subject_screen.dart';
-import 'auth_screen.dart';
+// import 'auth_screen.dart';
 import 'badges_screen.dart';
 import 'bonus_level_screen.dart';
 import 'sound_manager.dart';
+import 'loading_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,7 +26,7 @@ class EmmaGAdventuresApp extends StatelessWidget {
     return MaterialApp(
       title: 'Emma G Adventures',
       theme: ThemeData(primarySwatch: Colors.blue, fontFamily: 'Nunito'),
-      home: const AuthGate(),
+      home: const LoadingScreen(),
       debugShowCheckedModeBanner: false,
     );
   }
