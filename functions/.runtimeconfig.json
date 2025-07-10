@@ -1,5 +1,2 @@
-{
-  "gemini": {
-    "api_key": "REDACTED"
-  }
-}
+
+Error: Request to https://serviceusage.googleapis.com/v1/projects/emma-g-adventures/services/runtimeconfig.googleapis.com had HTTP Error: 403, Request had insufficient authentication scopes.
