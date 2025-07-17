@@ -3,7 +3,9 @@
 import 'dart:convert';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+// import 'package:cloud_functions/cloud_functions.dart';
+import 'package:http/http.dart' as http;
 
 class SoundManager {
   // --- PLAYER INSTANCES ---
@@ -46,32 +48,60 @@ class SoundManager {
     print("All speech stopped.");
   }
 
-  // The hybrid speak function that tries cloud first.
-  static Future<void> speak(String text) async {
-    // Stop any currently playing speech before starting new speech.
-    await stop();
 
-    try {
-      // --- 1. TRY THE CLOUD FIRST ---
-      print("Attempting to use Cloud TTS...");
-      final callable = FirebaseFunctions.instance.httpsCallable('synthesizeSpeech');
-      final result = await callable.call<Map<String, dynamic>>({'text': text});
+static Future<void> speak(String text) async {
+  await stop();
+
+  try {
+    print("Attempting to use Cloud TTS...");
+    
+    // 1. Get the current user and a fresh ID token.
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw Exception("Cannot use Cloud TTS without a logged-in user.");
+    }
+    final idToken = await user.getIdToken(true);
+
+    // 2. Define the exact URL of your Cloud Function.
+    final url = Uri.parse("https://us-central1-emma-g-adventures.cloudfunctions.net/synthesizeSpeech");
+
+    // 3. Manually build the request headers with the auth token.
+    final headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $idToken',
+    };
+
+    // 4. Manually build the request body.
+    final body = jsonEncode({
+      'data': {'text': text}
+    });
+
+    // 5. Make the HTTP POST request.
+    final response = await http.post(url, headers: headers, body: body);
+
+    // 6. Decode the response.
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      final audioBase64 = responseData['result']['audioBase64'] as String?;
       
-      final audioBase64 = result.data['audioBase64'] as String?;
       if (audioBase64 != null) {
         final audioBytes = base64Decode(audioBase64);
-        // Play the high-quality audio using the dedicated speech player
         await _speechPlayer.play(BytesSource(audioBytes));
         print("✅ Successfully played Cloud TTS audio.");
-        return; // Success! We are done.
+        return; // Success!
       }
-      print("⚠️ Cloud TTS returned no audio, falling back to on-device TTS.");
-      throw Exception("Cloud TTS returned null audio."); // Force fallback
-
-    } catch (e) {
-      // --- 2. IF CLOUD FAILS, FALLBACK TO ON-DEVICE ---
-      print("❌ Cloud TTS failed: $e. Falling back to on-device TTS.");
-      await _flutterTts.speak(text);
+      throw Exception("Cloud TTS returned null audio.");
+    } else {
+      // If the server returned an error (like 401, 500, etc.)
+      print("HTTP Error from TTS function: ${response.statusCode}");
+      print("Response Body: ${response.body}");
+      throw Exception("Cloud TTS function returned an error.");
     }
+  } catch (e) {
+    // --- IF CLOUD FAILS FOR ANY REASON, FALLBACK TO ON-DEVICE ---
+    print("❌ Cloud TTS failed: $e. Falling back to on-device TTS.");
+    await _flutterTts.speak(text);
   }
+}
+
 }
