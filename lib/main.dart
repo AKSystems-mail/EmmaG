@@ -2,22 +2,79 @@
 
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'firebase_options.dart';
 import 'subject_screen.dart';
-// import 'auth_screen.dart';
 import 'badges_screen.dart';
 import 'bonus_level_screen.dart';
 import 'sound_manager.dart';
-import 'loading_screen.dart';
 
+// --- Main Entry Point ---
 Future<void> main() async {
+  // 1. Ensure Flutter is ready before doing anything else.
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // 2. Initialize Firebase.
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // 3. Initialize your Sound Manager.
   await SoundManager.initializeTts();
+
+  // 4. Handle user sign-in and data creation BEFORE the app runs.
+  await _handleAuthAndSetup();
+
+  // 5. Now that all setup is complete, run the app.
   runApp(const EmmaGAdventuresApp());
 }
 
+// --- Startup Helper Functions ---
+
+// This function ensures a user is signed in and has data.
+Future<void> _handleAuthAndSetup() async {
+  try {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      final userCredential = await FirebaseAuth.instance.signInAnonymously();
+      user = userCredential.user;
+      print("New user signed in anonymously with UID: ${user?.uid}");
+      if (user != null) {
+        await _createInitialProgressData(user.uid);
+      }
+    } else {
+      print("User already signed in with UID: ${user.uid}");
+      // Also check if an existing user is missing data, and fix it.
+      await _createInitialProgressData(user.uid);
+    }
+  } catch (e) {
+    print("Error during initial auth setup: $e");
+  }
+}
+
+// This function creates the starting data for a user ONLY if it doesn't exist.
+Future<void> _createInitialProgressData(String userId) async {
+  final userDocRef = FirebaseFirestore.instance.collection('users').doc(userId);
+  final docSnapshot = await userDocRef.get();
+  
+  if (docSnapshot.exists) {
+    print("User data already exists for $userId. Skipping creation.");
+    return;
+  }
+
+  print("Creating initial progress data for new user: $userId");
+  final subjects = ['math', 'reading', 'science', 'world'];
+  final batch = FirebaseFirestore.instance.batch();
+  batch.set(userDocRef, {'earnedBadges': []});
+  for (var subject in subjects) {
+    final progressDocRef = userDocRef.collection('progress').doc(subject);
+    batch.set(progressDocRef, {'currentLevel': 1, 'currentTopicIndex': 0});
+  }
+  await batch.commit();
+}
+
+
+// --- App Root Widget ---
 class EmmaGAdventuresApp extends StatelessWidget {
   const EmmaGAdventuresApp({super.key});
 
@@ -26,12 +83,15 @@ class EmmaGAdventuresApp extends StatelessWidget {
     return MaterialApp(
       title: 'Emma G Adventures',
       theme: ThemeData(primarySwatch: Colors.blue, fontFamily: 'Nunito'),
-      home: const LoadingScreen(),
+      // The app now starts directly on the MainMenuScreen.
+      home: const MainMenuScreen(),
       debugShowCheckedModeBanner: false,
     );
   }
 }
 
+
+// --- Reusable Icon Button Widget ---
 class SubjectIconButton extends StatelessWidget {
   final String iconPath;
   final String subjectName;
@@ -68,6 +128,8 @@ class SubjectIconButton extends StatelessWidget {
   }
 }
 
+
+// --- Main Menu Screen Widget ---
 class MainMenuScreen extends StatefulWidget {
   const MainMenuScreen({super.key});
 
@@ -77,31 +139,13 @@ class MainMenuScreen extends StatefulWidget {
 
 class _MainMenuScreenState extends State<MainMenuScreen> {
   final AudioPlayer _musicPlayer = AudioPlayer();
-  // ADDED: State variable to track if music is on or off
   bool _isMusicOn = true;
 
-  // This is the standard color matrix for converting an image to grayscale.
   static const List<double> _grayscaleMatrix = <double>[
-    0.2126,
-    0.7152,
-    0.0722,
-    0,
-    0,
-    0.2126,
-    0.7152,
-    0.0722,
-    0,
-    0,
-    0.2126,
-    0.7152,
-    0.0722,
-    0,
-    0,
-    0,
-    0,
-    0,
-    1,
-    0,
+    0.2126, 0.7152, 0.0722, 0, 0,
+    0.2126, 0.7152, 0.0722, 0, 0,
+    0.2126, 0.7152, 0.0722, 0, 0,
+    0, 0, 0, 1, 0,
   ];
 
   @override
@@ -110,12 +154,18 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     _playBackgroundMusic();
   }
 
+  @override
+  void dispose() {
+    _musicPlayer.stop();
+    _musicPlayer.dispose();
+    super.dispose();
+  }
+
   void _playBackgroundMusic() async {
     await _musicPlayer.setReleaseMode(ReleaseMode.loop);
     await _musicPlayer.play(AssetSource('audio/main_theme.mp3'));
   }
 
-  // ADDED: Function to toggle the music on and off
   void _toggleMusic() {
     setState(() {
       _isMusicOn = !_isMusicOn;
@@ -125,13 +175,6 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
         _musicPlayer.pause();
       }
     });
-  }
-
-  @override
-  void dispose() {
-    _musicPlayer.stop();
-    _musicPlayer.dispose();
-    super.dispose();
   }
 
   @override

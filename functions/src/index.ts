@@ -1,24 +1,37 @@
 // Location: functions/src/index.ts
 
-// v5.2 - The definitive, stable version using onRequest and process.env.
+// v6.0 - The definitive version using onRequest and manual token verification.
 
 import {onRequest} from "firebase-functions/v2/https";
 import {GoogleGenerativeAI} from "@google/generative-ai";
 import {TextToSpeechClient, protos} from "@google-cloud/text-to-speech";
+import * as admin from "firebase-admin";
+
+// Initialize the Firebase Admin SDK ONCE at the top level.
+// This allows us to verify user tokens.
+admin.initializeApp();
 
 /**
- * A secure, callable function to interact with the Gemini AI tutor.
+ * A secure, publicly accessible function to interact with the Gemini AI tutor.
+ * Security is handled by manually verifying the user's Firebase Auth ID token.
  */
-export const askTheTutor =
-onRequest({cors: true}, async (request, response) => {
-  // Manually verify the auth token for security.
-  if (!request.headers.authorization?.startsWith("Bearer ")) {
-    console.error("askTheTutor: Unauthenticated request.");
+export const askTheTutor = onRequest({cors: true}, async (request, response) => {
+  // 1. Manually verify the auth token.
+  const idToken = request.headers.authorization?.split("Bearer ")[1];
+  if (!idToken) {
+    console.error("askTheTutor: Unauthorized - No token provided.");
     response.status(401).send({error: {message: "Unauthorized."}});
     return;
   }
+  try {
+    await admin.auth().verifyIdToken(idToken);
+  } catch (error) {
+    console.error("askTheTutor: Auth token verification failed:", error);
+    response.status(401).send({error: {message: "Unauthorized: Invalid token."}});
+    return;
+  }
 
-  // Read the API key directly from the process environment.
+  // 2. If verification succeeds, proceed with the function's logic.
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     console.error("GEMINI_API_KEY not found in environment.");
@@ -69,16 +82,26 @@ onRequest({cors: true}, async (request, response) => {
 });
 
 /**
- * A secure, callable function to synthesize speech from text.
+ * A secure, publicly accessible function to synthesize speech from text.
+ * Security is handled by manually verifying the user's Firebase Auth ID token.
  */
-export const synthesizeSpeech =
-onRequest({cors: true}, async (request, response) => {
-  if (!request.headers.authorization?.startsWith("Bearer ")) {
-    console.error("synthesizeSpeech: Unauthenticated request.");
+export const synthesizeSpeech = onRequest({cors: true}, async (request, response) => {
+  // 1. Manually verify the auth token.
+  const idToken = request.headers.authorization?.split("Bearer ")[1];
+  if (!idToken) {
+    console.error("synthesizeSpeech: Unauthorized - No token provided.");
     response.status(401).send({error: {message: "Unauthorized."}});
     return;
   }
+  try {
+    await admin.auth().verifyIdToken(idToken);
+  } catch (error) {
+    console.error("synthesizeSpeech: Auth token verification failed:", error);
+    response.status(401).send({error: {message: "Unauthorized: Invalid token."}});
+    return;
+  }
 
+  // 2. If verification succeeds, proceed with the function's logic.
   const text = request.body.data.text;
   if (!text) {
     response.status(400).send({error: {message: "Missing text."}});
@@ -89,7 +112,6 @@ onRequest({cors: true}, async (request, response) => {
   const ttsRequest = {
     input: {text: text},
     voice: {languageCode: "en-US", name: "en-US-Standard-I"},
-    // Use the official enum from the library for type safety.
     audioConfig: {
       audioEncoding: protos.google.cloud.texttospeech.v1.AudioEncoding.MP3,
     },
@@ -100,12 +122,10 @@ onRequest({cors: true}, async (request, response) => {
     if (!ttsResponse.audioContent) {
       throw new Error("Audio content is null.");
     }
-    const audioBase64 =
-    Buffer.from(ttsResponse.audioContent).toString("base64");
+    const audioBase64 = Buffer.from(ttsResponse.audioContent).toString("base64");
     response.status(200).send({result: {audioBase64: audioBase64}});
   } catch (error) {
     console.error("Error calling TTS API:", error);
-    response.status(500).send({error: {message:
-      "Failed to synthesize speech."}});
+    response.status(500).send({error: {message: "Failed to synthesize speech."}});
   }
 });
