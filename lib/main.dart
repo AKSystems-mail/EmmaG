@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:audioplayers/audioplayers.dart';
+// import 'package:just_audio/just_audio.dart';
+import 'package:audioplayers/audioplayers.dart' as audioplayers;
 import 'firebase_options.dart';
 import 'subject_screen.dart';
 import 'badges_screen.dart';
@@ -13,19 +14,10 @@ import 'sound_manager.dart';
 
 // --- Main Entry Point ---
 Future<void> main() async {
-  // 1. Ensure Flutter is ready before doing anything else.
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // 2. Initialize Firebase.
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  // 3. Initialize your Sound Manager.
   await SoundManager.initializeTts();
-
-  // 4. Handle user sign-in and data creation BEFORE the app runs.
   await _handleAuthAndSetup();
-
-  // 5. Now that all setup is complete, run the app.
   runApp(const EmmaGAdventuresApp());
 }
 
@@ -104,8 +96,17 @@ class SubjectIconButton extends StatelessWidget {
     required this.onTap,
   });
 
+
   @override
   Widget build(BuildContext context) {
+    // +++ THE FIX: Get the screen width here +++
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    // +++ THE FIX: Calculate a responsive font size +++
+    // We'll aim for the font size to be about 4% of the screen width,
+    // but we'll clamp it between 14px (for small phones) and 28px (for large tablets).
+    final responsiveFontSize = (screenWidth * 0.04).clamp(14.0, 28.0);
+
     return GestureDetector(
       onTap: onTap,
       child: Column(
@@ -115,11 +116,12 @@ class SubjectIconButton extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             subjectName,
-            style: const TextStyle(
+            style: TextStyle( // Changed to non-const to use the variable
               color: Colors.white,
-              fontSize: 16,
+              // +++ THE FIX: Use our new responsive font size +++
+              fontSize: responsiveFontSize,
               fontWeight: FontWeight.bold,
-              shadows: [Shadow(blurRadius: 5.0, color: Colors.black87)],
+              shadows: const [Shadow(blurRadius: 5.0, color: Colors.black87)],
             ),
           ),
         ],
@@ -138,7 +140,7 @@ class MainMenuScreen extends StatefulWidget {
 }
 
 class _MainMenuScreenState extends State<MainMenuScreen> {
-  final AudioPlayer _musicPlayer = AudioPlayer();
+  final audioplayers.AudioPlayer _musicPlayer = audioplayers.AudioPlayer();
   bool _isMusicOn = true;
 
   static const List<double> _grayscaleMatrix = <double>[
@@ -162,14 +164,15 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
   }
 
   void _playBackgroundMusic() async {
-    await _musicPlayer.setReleaseMode(ReleaseMode.loop);
-    await _musicPlayer.play(AssetSource('audio/main_theme.mp3'));
+    await _musicPlayer.setReleaseMode(audioplayers.ReleaseMode.loop);
+    await _musicPlayer.play(audioplayers.AssetSource('audio/main_theme.mp3'));
   }
 
   void _toggleMusic() {
     setState(() {
       _isMusicOn = !_isMusicOn;
       if (_isMusicOn) {
+        // The correct method to resume in 'audioplayers' is resume().
         _musicPlayer.resume();
       } else {
         _musicPlayer.pause();
@@ -179,6 +182,10 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // +++ THE FIX: Get the screen dimensions here +++
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+
     return Scaffold(
       body: Stack(
         children: [
@@ -200,7 +207,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 Padding(
                   padding: const EdgeInsets.only(top: 40.0),
                   child: SizedBox(
-                    height: 150,
+                    // +++ THE FIX: Title height is now a percentage of screen height +++
+                    height: screenHeight * 0.15, // 15% of the screen height
                     child: Image.asset("assets/images/EGA_title.png"),
                   ),
                 ),
@@ -308,7 +316,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
           Align(
             alignment: Alignment.bottomLeft,
             child: Container(
-              height: 250,
+              // +++ THE FIX: Character height is now a percentage of screen height +++
+              height: screenHeight * 0.3, // 30% of the screen height
               child: Image.asset(
                 "assets/images/emma_character_transparent.png",
                 fit: BoxFit.contain,
@@ -325,8 +334,9 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SizedBox(
-                    width: 80,
-                    height: 80,
+                    // +++ THE FIX: Trophy size is now a percentage of screen width +++
+                    width: screenWidth * 0.18, // 18% of the screen width
+                    height: screenWidth * 0.18,
                     child: IconButton(
                       padding: EdgeInsets.zero,
                       icon: Image.asset("assets/images/trophy_icon.png"),
@@ -365,8 +375,9 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     SizedBox(
-                      width: 60,
-                      height: 60,
+                      // +++ THE FIX: Speaker size is now a percentage of screen width +++
+                      width: screenWidth * 0.12, // 12% of the screen width
+                      height: screenWidth * 0.12,
                       child: IconButton(
                         padding: EdgeInsets.zero,
                         onPressed: _toggleMusic,
@@ -405,3 +416,4 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     );
   }
 }
+

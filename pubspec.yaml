@@ -43,6 +43,7 @@ dependencies:
   confetti: ^0.7.0
   http: ^1.2.1
   flutter_tts: ^4.0.2
+  just_audio: ^0.10.4
 
 dev_dependencies:
   flutter_test:
