@@ -93,16 +93,21 @@ class SubjectIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // +++ THE FIX: Get the screen width here +++
     final screenWidth = MediaQuery.of(context).size.width;
-    final responsiveFontSize = (screenWidth * 0.04).clamp(14.0, 28.0);
+    // THE FIX: Define a max icon size to prevent it from becoming too large on wide screens.
+    final iconSize = (screenWidth * 0.25).clamp(80.0, 150.0);
+    final responsiveFontSize = (screenWidth * 0.035).clamp(14.0, 24.0);
 
     return GestureDetector(
       onTap: onTap,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(child: Image.asset(iconPath, fit: BoxFit.contain)),
+          SizedBox(
+            width: iconSize,
+            height: iconSize,
+            child: Image.asset(iconPath, fit: BoxFit.contain),
+          ),
           const SizedBox(height: 8),
           Text(
             subjectName,
@@ -225,12 +230,13 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 ),
                 const SizedBox(height: 20),
                 Expanded(
-                  child: GridView.count(
-                    crossAxisCount: 3,
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
+                  child: GridView.extent(
+                    maxCrossAxisExtent: 200.0, // Max width for each item
+                    padding: const EdgeInsets.all(24.0),
+                    crossAxisSpacing: 24,
+                    mainAxisSpacing: 24,
                     physics: const NeverScrollableScrollPhysics(),
+                    shrinkWrap: true,
                     children: [
                       SubjectIconButton(
                         iconPath: "assets/images/math_icon.png",
@@ -335,8 +341,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SizedBox(
-                    width: screenWidth * 0.18, // 18% of the screen width
-                    height: screenWidth * 0.18,
+                    width: (screenWidth * 0.15).clamp(60.0, 100.0),
+                    height: (screenWidth * 0.15).clamp(60.0, 100.0),
                     child: IconButton(
                       padding: EdgeInsets.zero,
                       icon: Image.asset("assets/images/trophy_icon.png"),
@@ -352,12 +358,13 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     "Trophies",
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      shadows: [Shadow(blurRadius: 2, color: Colors.black87)],
+                      fontSize: (screenWidth * 0.03).clamp(12.0, 18.0),
+                      shadows: const [Shadow(blurRadius: 2, color: Colors.black87)],
                     ),
                   ),
                 ],
@@ -375,8 +382,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     SizedBox(
-                      width: screenWidth * 0.12, // 12% of the screen width
-                      height: screenWidth * 0.12,
+                      width: (screenWidth * 0.1).clamp(40.0, 70.0),
+                      height: (screenWidth * 0.1).clamp(40.0, 70.0),
                       child: IconButton(
                         padding: EdgeInsets.zero,
                         onPressed: _toggleMusic,
@@ -399,6 +406,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                       style: TextStyle(
                         color: _isMusicOn ? Colors.white : Colors.grey.shade400,
                         fontWeight: FontWeight.bold,
+                        fontSize: (screenWidth * 0.03).clamp(12.0, 18.0),
                         shadows: const [
                           Shadow(blurRadius: 2, color: Colors.black87),
                         ],

@@ -242,7 +242,12 @@ class _BonusLevelScreenState extends State<BonusLevelScreen> {
                   Expanded(
                     child: Text(
                       challenge.promptText,
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white, shadows: [Shadow(blurRadius: 2, color: Colors.black87)]),
+                      style: TextStyle(
+                        fontSize: (MediaQuery.of(context).size.width * 0.05).clamp(18.0, 32.0),
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        shadows: const [Shadow(blurRadius: 2, color: Colors.black87)],
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   ),

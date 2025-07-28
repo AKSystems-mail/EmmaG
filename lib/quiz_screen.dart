@@ -148,7 +148,12 @@ class _QuizScreenState extends State<QuizScreen> {
                         Expanded(
                           child: Text(
                             questionText,
-                            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white, shadows: [Shadow(blurRadius: 2, color: Colors.black87)]),
+                            style: TextStyle(
+                              fontSize: (MediaQuery.of(context).size.width * 0.06).clamp(20.0, 36.0),
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              shadows: const [Shadow(blurRadius: 2, color: Colors.black87)],
+                            ),
                             textAlign: TextAlign.center,
                           ),
                         ),
