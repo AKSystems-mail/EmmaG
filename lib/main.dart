@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-// import 'package:just_audio/just_audio.dart';
 import 'package:audioplayers/audioplayers.dart' as audioplayers;
 import 'firebase_options.dart';
 import 'subject_screen.dart';
@@ -20,8 +19,6 @@ Future<void> main() async {
   await _handleAuthAndSetup();
   runApp(const EmmaGAdventuresApp());
 }
-
-// --- Startup Helper Functions ---
 
 // This function ensures a user is signed in and has data.
 Future<void> _handleAuthAndSetup() async {
@@ -48,7 +45,7 @@ Future<void> _handleAuthAndSetup() async {
 Future<void> _createInitialProgressData(String userId) async {
   final userDocRef = FirebaseFirestore.instance.collection('users').doc(userId);
   final docSnapshot = await userDocRef.get();
-  
+
   if (docSnapshot.exists) {
     print("User data already exists for $userId. Skipping creation.");
     return;
@@ -64,7 +61,6 @@ Future<void> _createInitialProgressData(String userId) async {
   }
   await batch.commit();
 }
-
 
 // --- App Root Widget ---
 class EmmaGAdventuresApp extends StatelessWidget {
@@ -82,7 +78,6 @@ class EmmaGAdventuresApp extends StatelessWidget {
   }
 }
 
-
 // --- Reusable Icon Button Widget ---
 class SubjectIconButton extends StatelessWidget {
   final String iconPath;
@@ -96,15 +91,10 @@ class SubjectIconButton extends StatelessWidget {
     required this.onTap,
   });
 
-
   @override
   Widget build(BuildContext context) {
     // +++ THE FIX: Get the screen width here +++
     final screenWidth = MediaQuery.of(context).size.width;
-
-    // +++ THE FIX: Calculate a responsive font size +++
-    // We'll aim for the font size to be about 4% of the screen width,
-    // but we'll clamp it between 14px (for small phones) and 28px (for large tablets).
     final responsiveFontSize = (screenWidth * 0.04).clamp(14.0, 28.0);
 
     return GestureDetector(
@@ -116,9 +106,8 @@ class SubjectIconButton extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             subjectName,
-            style: TextStyle( // Changed to non-const to use the variable
+            style: TextStyle(
               color: Colors.white,
-              // +++ THE FIX: Use our new responsive font size +++
               fontSize: responsiveFontSize,
               fontWeight: FontWeight.bold,
               shadows: const [Shadow(blurRadius: 5.0, color: Colors.black87)],
@@ -129,7 +118,6 @@ class SubjectIconButton extends StatelessWidget {
     );
   }
 }
-
 
 // --- Main Menu Screen Widget ---
 class MainMenuScreen extends StatefulWidget {
@@ -144,10 +132,26 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
   bool _isMusicOn = true;
 
   static const List<double> _grayscaleMatrix = <double>[
-    0.2126, 0.7152, 0.0722, 0, 0,
-    0.2126, 0.7152, 0.0722, 0, 0,
-    0.2126, 0.7152, 0.0722, 0, 0,
-    0, 0, 0, 1, 0,
+    0.2126,
+    0.7152,
+    0.0722,
+    0,
+    0,
+    0.2126,
+    0.7152,
+    0.0722,
+    0,
+    0,
+    0.2126,
+    0.7152,
+    0.0722,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
   ];
 
   @override
@@ -172,7 +176,6 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     setState(() {
       _isMusicOn = !_isMusicOn;
       if (_isMusicOn) {
-        // The correct method to resume in 'audioplayers' is resume().
         _musicPlayer.resume();
       } else {
         _musicPlayer.pause();
@@ -182,7 +185,6 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // +++ THE FIX: Get the screen dimensions here +++
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
 
@@ -316,8 +318,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
           Align(
             alignment: Alignment.bottomLeft,
             child: Container(
-              // +++ THE FIX: Character height is now a percentage of screen height +++
-              height: screenHeight * 0.3, // 30% of the screen height
+              height: screenHeight * 0.3,
               child: Image.asset(
                 "assets/images/emma_character_transparent.png",
                 fit: BoxFit.contain,
@@ -334,7 +335,6 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SizedBox(
-                    // +++ THE FIX: Trophy size is now a percentage of screen width +++
                     width: screenWidth * 0.18, // 18% of the screen width
                     height: screenWidth * 0.18,
                     child: IconButton(
@@ -375,13 +375,11 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     SizedBox(
-                      // +++ THE FIX: Speaker size is now a percentage of screen width +++
                       width: screenWidth * 0.12, // 12% of the screen width
                       height: screenWidth * 0.12,
                       child: IconButton(
                         padding: EdgeInsets.zero,
                         onPressed: _toggleMusic,
-                        // This is the corrected conditional logic for the icon
                         icon:
                             _isMusicOn
                                 ? Image.asset("assets/images/speaker_icon.png")
@@ -416,4 +414,3 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     );
   }
 }
-
