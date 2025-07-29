@@ -228,7 +228,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                     shadows: [Shadow(blurRadius: 10.0, color: Colors.black54)],
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 10),
                 Expanded(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -282,7 +282,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 10),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
