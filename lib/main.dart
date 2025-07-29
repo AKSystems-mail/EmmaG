@@ -95,30 +95,30 @@ class SubjectIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     // THE FIX: Define a max icon size to prevent it from becoming too large on wide screens.
-    final iconSize = (screenWidth * 0.25).clamp(80.0, 150.0);
-    final responsiveFontSize = (screenWidth * 0.035).clamp(14.0, 24.0);
+    final iconSize = (screenWidth * 0.25).clamp(80.0, 120.0);
+    final responsiveFontSize = (screenWidth * 0.035).clamp(14.0, 20.0);
 
     return GestureDetector(
       onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: iconSize,
-            height: iconSize,
-            child: Image.asset(iconPath, fit: BoxFit.contain),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            subjectName,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: responsiveFontSize,
-              fontWeight: FontWeight.bold,
-              shadows: const [Shadow(blurRadius: 5.0, color: Colors.black87)],
+      child: SizedBox(
+        width: iconSize,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(iconPath, fit: BoxFit.contain),
+            const SizedBox(height: 8),
+            Text(
+              subjectName,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: responsiveFontSize,
+                fontWeight: FontWeight.bold,
+                shadows: const [Shadow(blurRadius: 5.0, color: Colors.black87)],
+              ),
+              textAlign: TextAlign.center,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -230,88 +230,90 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 ),
                 const SizedBox(height: 20),
                 Expanded(
-                  child: GridView.extent(
-                    maxCrossAxisExtent: 200.0, // Max width for each item
-                    padding: const EdgeInsets.all(24.0),
-                    crossAxisSpacing: 24,
-                    mainAxisSpacing: 24,
-                    physics: const NeverScrollableScrollPhysics(),
-                    shrinkWrap: true,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      SubjectIconButton(
-                        iconPath: "assets/images/math_icon.png",
-                        subjectName: "Math",
-                        onTap: () {
-                          SoundManager.playClickSound();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) =>
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          SubjectIconButton(
+                            iconPath: "assets/images/math_icon.png",
+                            subjectName: "Math",
+                            onTap: () {
+                              SoundManager.playClickSound();
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
                                       const SubjectScreen(subjectName: "Math"),
-                            ),
-                          );
-                        },
-                      ),
-                      SubjectIconButton(
-                        iconPath: "assets/images/language_arts_icon.png",
-                        subjectName: "Reading",
-                        onTap: () {
-                          SoundManager.playClickSound();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) => const SubjectScreen(
+                                ),
+                              );
+                            },
+                          ),
+                          SubjectIconButton(
+                            iconPath: "assets/images/language_arts_icon.png",
+                            subjectName: "Reading",
+                            onTap: () {
+                              SoundManager.playClickSound();
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const SubjectScreen(
                                     subjectName: "Reading",
                                   ),
-                            ),
-                          );
-                        },
-                      ),
-                      SubjectIconButton(
-                        iconPath: "assets/images/science_icon.png",
-                        subjectName: "Science",
-                        onTap: () {
-                          SoundManager.playClickSound();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) => const SubjectScreen(
+                                ),
+                              );
+                            },
+                          ),
+                          SubjectIconButton(
+                            iconPath: "assets/images/science_icon.png",
+                            subjectName: "Science",
+                            onTap: () {
+                              SoundManager.playClickSound();
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const SubjectScreen(
                                     subjectName: "Science",
                                   ),
-                            ),
-                          );
-                        },
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                       ),
-                      SubjectIconButton(
-                        iconPath: "assets/images/social_studies_icon.png",
-                        subjectName: "World",
-                        onTap: () {
-                          SoundManager.playClickSound();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) =>
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          SubjectIconButton(
+                            iconPath: "assets/images/social_studies_icon.png",
+                            subjectName: "World",
+                            onTap: () {
+                              SoundManager.playClickSound();
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
                                       const SubjectScreen(subjectName: "World"),
-                            ),
-                          );
-                        },
-                      ),
-                      SubjectIconButton(
-                        iconPath: "assets/images/bonus_icon.png",
-                        subjectName: "Bonus!",
-                        onTap: () {
-                          SoundManager.playClickSound();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const BonusLevelScreen(),
-                            ),
-                          );
-                        },
+                                ),
+                              );
+                            },
+                          ),
+                          SubjectIconButton(
+                            iconPath: "assets/images/bonus_icon.png",
+                            subjectName: "Bonus!",
+                            onTap: () {
+                              SoundManager.playClickSound();
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const BonusLevelScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                       ),
                     ],
                   ),
