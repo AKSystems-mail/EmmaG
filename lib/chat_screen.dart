@@ -14,11 +14,13 @@ class ChatMessage {
 
 class ChatScreen extends StatefulWidget {
   final String lessonContext;
+  final String topicName;
   final List<String>? suggestedQuestions; // Make this optional
 
   const ChatScreen({
     super.key,
     required this.lessonContext,
+    required this.topicName,
     this.suggestedQuestions,
   });
 
@@ -65,6 +67,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final body = jsonEncode({
         'data': { // Callable functions expect the data to be inside a 'data' key.
           'lessonContext': widget.lessonContext,
+          'topicName': widget.topicName,
           'userQuestion': questionToSend,
         }
       });

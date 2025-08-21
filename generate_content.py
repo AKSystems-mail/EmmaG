@@ -70,7 +70,6 @@ WORLD_CURRICULUM = [
 def generate_lesson_content(topic_name: str, subject: str, difficulty_code: int, level_number: int):
     """Generates lesson content and quiz questions using the Generative AI model."""
 
-
     prompt = f"""
     You are an expert curriculum developer and a fun, engaging 1st-grade teacher with a PhD in childhood education.
     Your task is to generate a lesson and a multiple-choice quiz for a specific level in an educational app.
@@ -86,26 +85,27 @@ def generate_lesson_content(topic_name: str, subject: str, difficulty_code: int,
     **Difficulty Code:** {difficulty_code}
 
     **CRITICAL RULES FOR THIS TASK:**
-    1.  **Analogy Variety:** You MUST use a completely different real-world analogy or scenario for each level. For example, if the topic is addition, do not use "apples" or "bouncy balls" multiple times. Use scenarios involving building blocks, animal friends, cookies, stickers, etc.
-    2.  **Phrasing Variety:** You MUST avoid starting every lesson with repetivie phrases like "Imagine you have...". Use different sentence structures to introduce the concept. For example: "What happens when...", "Let's think about...", "Counting is fun! If...".
-    3.  **Difficulty Scaling:** The lesson text and quiz question for level {level_number} MUST be slightly more complex or introduce a new element compared to the previous level. For example, for addition, early levels might be 1+1, while later levels could be 4+5.
+    1.  **Analogy Variety:** You MUST use a completely different real-world analogy or scenario for each level.
+    2.  **Phrasing Variety:** You MUST avoid starting every lesson with repetitive phrases.
+    3.  **Difficulty Scaling:** The lesson text and quiz question for level {level_number} MUST be slightly more complex.
 
     **Instructions:**
-    1.  **Lesson Text:** Write a simple, one or two-sentence explanation of the topic, following all the rules above.
-    2.  **Quiz:** Create ONE multiple-choice quiz question that directly tests the concept from the lesson text.
+    1.  **Lesson Text:** Write a simple, one or two-sentence explanation of the topic.
+    2.  **Quiz:** Create ONE multiple-choice quiz question that directly tests the concept.
     3.  **JSON Output:** Provide the output as a single, raw JSON object with NO explanatory text or markdown.
 
     **JSON Schema:**
+    - "topicName": (String) The human-readable topic name. Use the exact Topic I provided: "{topic_name}".
     - "lessonText": (String) The lesson text you wrote.
     - "difficulty": (Number) The difficulty code I provided.
     - "quiz": (Array of 1 Map Object)
         - "question": (String) The quiz question.
         - "options": (Array of 4 Strings) The answer choices.
-        - "correctAnswer": (String) The correct answer, which must exactly match one of the options.
-    - "suggestedQuestions": (Array of 2-3 Strings) Simple, relevant questions a child might ask about this lesson text.
+        - "correctAnswer": (String) The correct answer.
+    - "suggestedQuestions": (Array of 2-3 Strings) Simple, relevant questions a child might ask.
     """
 
-    model = genai.GenerativeModel('gemini-1.5-pro')
+    model = genai.GenerativeModel('gemini-2.0-flash')
     response = model.generate_content(prompt)
 
     cleaned_response_text = response.text.strip().replace("```json", "").replace("```", "")
@@ -116,8 +116,8 @@ def main():
     """Main function to generate all content for the defined curriculum."""
     genai.configure(api_key=API_KEY)
     
-    current_curriculum = WORLD_CURRICULUM # Change this to select other curriculums
-    current_subject_name = "World"       # Make sure this matches the curriculum
+    current_curriculum = MATH_CURRICULUM # Change this to select other curriculums
+    current_subject_name = "Math"       # Make sure this matches the curriculum
     
     print(f"Starting content generation for the {current_subject_name} curriculum...")
     

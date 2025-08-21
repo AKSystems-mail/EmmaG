@@ -93,27 +93,38 @@ class SubjectIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // +++ THE FIX: Get the screen width here +++
     final screenWidth = MediaQuery.of(context).size.width;
-    final responsiveFontSize = (screenWidth * 0.04).clamp(14.0, 28.0);
+    // +++ THE FIX: This is now the master control for the icon's size +++
+    final double iconContainerSize = (screenWidth * 0.22).clamp(80.0, 120.0);
+    final responsiveFontSize = (screenWidth * 0.035).clamp(14.0, 20.0);
 
     return GestureDetector(
       onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Expanded(child: Image.asset(iconPath, fit: BoxFit.contain)),
-          const SizedBox(height: 8),
-          Text(
-            subjectName,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: responsiveFontSize,
-              fontWeight: FontWeight.bold,
-              shadows: const [Shadow(blurRadius: 5.0, color: Colors.black87)],
+      child: SizedBox(
+        // The overall widget takes up this much space
+        width: iconContainerSize,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: iconContainerSize * 0.8, // Image takes 80% of the container
+              height: iconContainerSize * 0.8,
+              child: Image.asset(iconPath, fit: BoxFit.contain),
             ),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              subjectName,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: responsiveFontSize,
+                fontWeight: FontWeight.bold,
+                shadows: const [Shadow(blurRadius: 5.0, color: Colors.black87)],
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -130,6 +141,7 @@ class MainMenuScreen extends StatefulWidget {
 class _MainMenuScreenState extends State<MainMenuScreen> {
   final audioplayers.AudioPlayer _musicPlayer = audioplayers.AudioPlayer();
   bool _isMusicOn = true;
+  bool _isMusicInitialized = false;
 
   static const List<double> _grayscaleMatrix = <double>[
     0.2126,
@@ -167,250 +179,204 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     super.dispose();
   }
 
-  void _playBackgroundMusic() async {
-    await _musicPlayer.setReleaseMode(audioplayers.ReleaseMode.loop);
-    await _musicPlayer.play(audioplayers.AssetSource('audio/main_theme.mp3'));
+  Future<void> _playBackgroundMusic() async {
+    try {
+      await _musicPlayer.setReleaseMode(audioplayers.ReleaseMode.loop);
+      await _musicPlayer.play(audioplayers.AssetSource('audio/main_theme.mp3'));
+      // If it succeeds, we mark it as initialized.
+      if (mounted) {
+        setState(() {
+          _isMusicInitialized = true;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isMusicOn = false; // Start with the icon off if autoplay fails.
+        });
+      }
+    }
   }
 
   void _toggleMusic() {
     setState(() {
       _isMusicOn = !_isMusicOn;
       if (_isMusicOn) {
-        _musicPlayer.resume();
+        // If the music is NOT initialized, we need to start it from scratch.
+        if (!_isMusicInitialized) {
+          _playBackgroundMusic();
+        } else {
+          // If it is initialized, we can safely resume it.
+          _musicPlayer.resume();
+        }
       } else {
+        // Pausing is always safe.
         _musicPlayer.pause();
       }
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
-    final screenWidth = MediaQuery.of(context).size.width;
+// In lib/main.dart, inside the _MainMenuScreenState class
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          // 1. Background and Overlay
-          Container(
-            decoration: const BoxDecoration(
-              image: DecorationImage(
-                image: AssetImage("assets/images/main_background.png"),
-                fit: BoxFit.cover,
-              ),
+@override
+Widget build(BuildContext context) {
+  final screenHeight = MediaQuery.of(context).size.height;
+  final screenWidth = MediaQuery.of(context).size.width;
+  final buttonLabelFontSize = (screenWidth * 0.03).clamp(12.0, 18.0);
+
+  return Scaffold(
+    body: Stack(
+      children: [
+        // 1. Background and Overlay
+        Container(
+          decoration: const BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage("assets/images/main_background.png"),
+              fit: BoxFit.cover,
             ),
           ),
-          Container(color: Colors.black.withOpacity(0.4)),
+        ),
+        Container(color: Colors.black.withOpacity(0.4)),
 
-          // 2. Main Content Column
-          SafeArea(
+        // 2. Main Content Column
+        SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 40.0),
+                child: SizedBox(
+                  height: screenHeight * 0.15,
+                  child: Image.asset("assets/images/EGA_title.png"),
+                ),
+              ),
+              Text(
+                'Choose Your Adventure!',
+                style: TextStyle(
+                  fontSize: (screenWidth * 0.05).clamp(20.0, 32.0),
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  shadows: const [Shadow(blurRadius: 10.0, color: Colors.black54)],
+                ),
+              ),
+              // +++ THE FIX: This SizedBox controls the gap you wanted to adjust +++
+              SizedBox(height: screenHeight * 0.03), // Use a smaller percentage for a smaller gap
+
+              Wrap(
+                spacing: 16.0,
+                runSpacing: 16.0,
+                alignment: WrapAlignment.start,
+                children: [
+                  SubjectIconButton(
+                    iconPath: "assets/images/math_icon.png",
+                    subjectName: "Math",
+                    onTap: () { SoundManager.playClickSound(); Navigator.push(context, MaterialPageRoute(builder: (context) => const SubjectScreen(subjectName: "Math"))); },
+                  ),
+                  SubjectIconButton(
+                    iconPath: "assets/images/language_arts_icon.png",
+                    subjectName: "Reading",
+                    onTap: () { SoundManager.playClickSound(); Navigator.push(context, MaterialPageRoute(builder: (context) => const SubjectScreen(subjectName: "Reading"))); },
+                  ),
+                  SubjectIconButton(
+                    iconPath: "assets/images/science_icon.png",
+                    subjectName: "Science",
+                    onTap: () { SoundManager.playClickSound(); Navigator.push(context, MaterialPageRoute(builder: (context) => const SubjectScreen(subjectName: "Science"))); },
+                  ),
+                  SubjectIconButton(
+                    iconPath: "assets/images/social_studies_icon.png",
+                    subjectName: "World",
+                    onTap: () { SoundManager.playClickSound(); Navigator.push(context, MaterialPageRoute(builder: (context) => const SubjectScreen(subjectName: "World"))); },
+                  ),
+                  SubjectIconButton(
+                    iconPath: "assets/images/bonus_icon.png",
+                    subjectName: "Bonus!",
+                    onTap: () { SoundManager.playClickSound(); Navigator.push(context, MaterialPageRoute(builder: (context) => const BonusLevelScreen())); },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        // 3. The Character Image (Bottom Left)
+        Align(
+          alignment: Alignment.bottomLeft,
+          child: Container(
+            height: screenHeight * 0.3,
+            child: Image.asset("assets/images/emma_character_transparent.png", fit: BoxFit.contain),
+          ),
+        ),
+
+        // 4. The "My Badges" Button (Bottom Right)
+        Align(
+          alignment: Alignment.bottomRight,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 24.0, bottom: 24.0),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 40.0),
-                  child: SizedBox(
-                    // +++ THE FIX: Title height is now a percentage of screen height +++
-                    height: screenHeight * 0.15, // 15% of the screen height
-                    child: Image.asset("assets/images/EGA_title.png"),
+                SizedBox(
+                  width: (screenWidth * 0.15).clamp(60.0, 100.0),
+                  height: (screenWidth * 0.15).clamp(60.0, 100.0),
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    icon: Image.asset("assets/images/trophy_icon.png"),
+                    onPressed: () { SoundManager.playClickSound(); Navigator.push(context, MaterialPageRoute(builder: (context) => const BadgesScreen())); },
                   ),
                 ),
-                const Text(
-                  'Choose Your Adventure!',
+                const SizedBox(height: 4),
+                Text(
+                  "Trophies",
                   style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
                     color: Colors.white,
-                    shadows: [Shadow(blurRadius: 10.0, color: Colors.black54)],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Expanded(
-                  child: GridView.count(
-                    crossAxisCount: 3,
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                    physics: const NeverScrollableScrollPhysics(),
-                    children: [
-                      SubjectIconButton(
-                        iconPath: "assets/images/math_icon.png",
-                        subjectName: "Math",
-                        onTap: () {
-                          SoundManager.playClickSound();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) =>
-                                      const SubjectScreen(subjectName: "Math"),
-                            ),
-                          );
-                        },
-                      ),
-                      SubjectIconButton(
-                        iconPath: "assets/images/language_arts_icon.png",
-                        subjectName: "Reading",
-                        onTap: () {
-                          SoundManager.playClickSound();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) => const SubjectScreen(
-                                    subjectName: "Reading",
-                                  ),
-                            ),
-                          );
-                        },
-                      ),
-                      SubjectIconButton(
-                        iconPath: "assets/images/science_icon.png",
-                        subjectName: "Science",
-                        onTap: () {
-                          SoundManager.playClickSound();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) => const SubjectScreen(
-                                    subjectName: "Science",
-                                  ),
-                            ),
-                          );
-                        },
-                      ),
-                      SubjectIconButton(
-                        iconPath: "assets/images/social_studies_icon.png",
-                        subjectName: "World",
-                        onTap: () {
-                          SoundManager.playClickSound();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) =>
-                                      const SubjectScreen(subjectName: "World"),
-                            ),
-                          );
-                        },
-                      ),
-                      SubjectIconButton(
-                        iconPath: "assets/images/bonus_icon.png",
-                        subjectName: "Bonus!",
-                        onTap: () {
-                          SoundManager.playClickSound();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const BonusLevelScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
+                    fontWeight: FontWeight.bold,
+                      fontSize: buttonLabelFontSize,
+                      shadows: const [Shadow(blurRadius: 2, color: Colors.black87)],
                   ),
                 ),
               ],
             ),
           ),
+        ),
 
-          // 3. The Character Image (Bottom Left)
-          Align(
-            alignment: Alignment.bottomLeft,
-            child: Container(
-              height: screenHeight * 0.3,
-              child: Image.asset(
-                "assets/images/emma_character_transparent.png",
-                fit: BoxFit.contain,
-              ),
-            ),
-          ),
-
-          // 4. The "My Badges" Button (Bottom Right)
-          Align(
-            alignment: Alignment.bottomRight,
+        // 5. THE MUSIC TOGGLE BUTTON (TOP RIGHT)
+        SafeArea(
+          child: Align(
+            alignment: Alignment.topRight,
             child: Padding(
-              padding: const EdgeInsets.only(right: 24.0, bottom: 24.0),
+              padding: const EdgeInsets.all(16.0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SizedBox(
-                    width: screenWidth * 0.18, // 18% of the screen width
-                    height: screenWidth * 0.18,
+                    width: (screenWidth * 0.1).clamp(40.0, 70.0),
+                    height: (screenWidth * 0.1).clamp(40.0, 70.0),
                     child: IconButton(
                       padding: EdgeInsets.zero,
-                      icon: Image.asset("assets/images/trophy_icon.png"),
-                      onPressed: () {
-                        SoundManager.playClickSound();
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const BadgesScreen(),
-                          ),
-                        );
-                      },
+                      onPressed: _toggleMusic,
+                      icon: _isMusicOn
+                          ? Image.asset("assets/images/speaker_icon.png")
+                          : ColorFiltered(
+                              colorFilter: const ColorFilter.matrix(_grayscaleMatrix),
+                              child: Image.asset("assets/images/speaker_icon.png"),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    "Trophies",
+                  Text(
+                    "Music",
                     style: TextStyle(
-                      color: Colors.white,
+                      color: _isMusicOn ? Colors.white : Colors.grey.shade400,
                       fontWeight: FontWeight.bold,
-                      shadows: [Shadow(blurRadius: 2, color: Colors.black87)],
+                      fontSize: (screenWidth * 0.03).clamp(12.0, 18.0),
+                      shadows: const [Shadow(blurRadius: 2, color: Colors.black87)],
                     ),
                   ),
                 ],
               ),
             ),
           ),
-
-          // 5. THE CORRECTED MUSIC TOGGLE BUTTON (TOP RIGHT)
-          SafeArea(
-            child: Align(
-              alignment: Alignment.topRight,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: screenWidth * 0.12, // 12% of the screen width
-                      height: screenWidth * 0.12,
-                      child: IconButton(
-                        padding: EdgeInsets.zero,
-                        onPressed: _toggleMusic,
-                        icon:
-                            _isMusicOn
-                                ? Image.asset("assets/images/speaker_icon.png")
-                                : ColorFiltered(
-                                  colorFilter: const ColorFilter.matrix(
-                                    _grayscaleMatrix,
-                                  ),
-                                  child: Image.asset(
-                                    "assets/images/speaker_icon.png",
-                                  ),
-                                ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "Music",
-                      style: TextStyle(
-                        color: _isMusicOn ? Colors.white : Colors.grey.shade400,
-                        fontWeight: FontWeight.bold,
-                        shadows: const [
-                          Shadow(blurRadius: 2, color: Colors.black87),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+        ),
+      ],
+    ));
   }
 }

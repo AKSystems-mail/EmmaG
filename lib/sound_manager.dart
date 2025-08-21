@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-// import 'package:cloud_functions/cloud_functions.dart';
 import 'package:http/http.dart' as http;
 
 class SoundManager {
@@ -36,6 +35,9 @@ class SoundManager {
   static void playClickSound() {
     _effectsPlayer.play(AssetSource('audio/click.mp3'));
   }
+    static void playWrongSound() {
+    _effectsPlayer.play(AssetSource('audio/wrong_answer.mp3'));
+  }
 
   // --- SPEECH CONTROL ---
 
@@ -45,7 +47,6 @@ class SoundManager {
     await _speechPlayer.stop();
     // Stop the on-device TTS engine
     await _flutterTts.stop();
-    print("All speech stopped.");
   }
 
 
