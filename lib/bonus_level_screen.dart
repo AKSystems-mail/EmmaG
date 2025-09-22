@@ -243,16 +243,31 @@ class _BonusLevelScreenState extends State<BonusLevelScreen> {
   void _showTryAgainDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Not Quite!"),
-        content: const Text("You lost a heart. Take another look and try again!"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text("OK"),
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(24.0),
+            decoration: const BoxDecoration(image: DecorationImage(image: AssetImage("assets/images/parchment_background.png"), fit: BoxFit.fill)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text("Not Quite!", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF5D4037))),
+                const SizedBox(height: 16),
+                const Text("Take another look and try again!", textAlign: TextAlign.center, style: TextStyle(fontSize: 18, color: Color(0xFF5D4037))),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop(); // Just close the dialog.
+                  },
+                  child: const Text("Try Again", style: TextStyle(fontSize: 18, color: Color(0xFF5D4037))),
+                ),
+              ],
+            ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -260,19 +275,46 @@ class _BonusLevelScreenState extends State<BonusLevelScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text("Out of Hearts!"),
-        content: const Text("Great effort! Come back tomorrow for a new set of challenges."),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop(); // Close dialog
-              Navigator.of(context).pop(); // Go back to previous screen
-            },
-            child: const Text("OK"),
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(24.0),
+            decoration: const BoxDecoration(
+              image: DecorationImage(
+                image: AssetImage("assets/images/parchment_background.png"),
+                fit: BoxFit.fill,
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  "Out of Hearts!",
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF5D4037)),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  "Great effort! Come back tomorrow for a new set of challenges.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 18, color: Color(0xFF5D4037)),
+                ),
+                const SizedBox(height: 24),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop(); // Close dialog
+                    Navigator.of(context).pop(); // Go back to previous screen
+                  },
+                  child: const Text(
+                    "OK",
+                    style: TextStyle(fontSize: 18, color: Color(0xFF5D4037)),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
