@@ -60,6 +60,11 @@ class _BonusLevelScreenState extends State<BonusLevelScreen> {
   int _lives = 3;
   bool _canPlayToday = false;
 
+  // Helper to generate a unique ID for bonus challenges for caching
+  String _getChallengeId(String challengeId) {
+    return "bonus_$challengeId";
+  }
+
   // --- LIFECYCLE METHODS ---
   @override
   void initState() {
@@ -513,7 +518,7 @@ class _BonusLevelScreenState extends State<BonusLevelScreen> {
                       icon: Image.asset("assets/images/speaker_icon.png"),
                       iconSize: 36,
                       onPressed: () {
-                        SoundManager.speak(challenge.promptText);
+                        SoundManager.speak(challenge.promptText, _getChallengeId(challenge.id)); // Updated call
                       },
                     ),
                   ],

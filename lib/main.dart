@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:audioplayers/audioplayers.dart' as audioplayers;
+// import 'package:audioplayers/audioplayers.dart' as audioplayers;
 import 'firebase_options.dart';
 import 'subject_screen.dart';
 import 'badges_screen.dart';
@@ -139,9 +139,7 @@ class MainMenuScreen extends StatefulWidget {
 }
 
 class _MainMenuScreenState extends State<MainMenuScreen> {
-  final audioplayers.AudioPlayer _musicPlayer = audioplayers.AudioPlayer();
-  bool _isMusicOn = true;
-  bool _isMusicInitialized = false;
+  bool _userHasInteracted = false;
 
   static const List<double> _grayscaleMatrix = <double>[
     0.2126,
@@ -166,52 +164,19 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     0,
   ];
 
+
   @override
   void initState() {
     super.initState();
-    _playBackgroundMusic();
-  }
-
-  @override
-  void dispose() {
-    _musicPlayer.stop();
-    _musicPlayer.dispose();
-    super.dispose();
-  }
-
-  Future<void> _playBackgroundMusic() async {
-    try {
-      await _musicPlayer.setReleaseMode(audioplayers.ReleaseMode.loop);
-      await _musicPlayer.play(audioplayers.AssetSource('audio/main_theme.mp3'));
-      // If it succeeds, we mark it as initialized.
-      if (mounted) {
-        setState(() {
-          _isMusicInitialized = true;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isMusicOn = false; // Start with the icon off if autoplay fails.
-        });
-      }
-    }
   }
 
   void _toggleMusic() {
     setState(() {
-      _isMusicOn = !_isMusicOn;
-      if (_isMusicOn) {
-        // If the music is NOT initialized, we need to start it from scratch.
-        if (!_isMusicInitialized) {
-          _playBackgroundMusic();
-        } else {
-          // If it is initialized, we can safely resume it.
-          _musicPlayer.resume();
-        }
+      if (!_userHasInteracted) {
+        _userHasInteracted = true;
+        SoundManager.playBackgroundMusic();
       } else {
-        // Pausing is always safe.
-        _musicPlayer.pause();
+        SoundManager.toggleMusic();
       }
     });
   }
@@ -353,7 +318,7 @@ Widget build(BuildContext context) {
                     child: IconButton(
                       padding: EdgeInsets.zero,
                       onPressed: _toggleMusic,
-                      icon: _isMusicOn
+                      icon: SoundManager.isMusicOn
                           ? Image.asset("assets/images/speaker_icon.png")
                           : ColorFiltered(
                               colorFilter: const ColorFilter.matrix(_grayscaleMatrix),
@@ -365,7 +330,7 @@ Widget build(BuildContext context) {
                   Text(
                     "Music",
                     style: TextStyle(
-                      color: _isMusicOn ? Colors.white : Colors.grey.shade400,
+                      color: SoundManager.isMusicOn ? Colors.white : Colors.grey.shade400,
                       fontWeight: FontWeight.bold,
                       fontSize: (screenWidth * 0.03).clamp(12.0, 18.0),
                       shadows: const [Shadow(blurRadius: 2, color: Colors.black87)],
@@ -376,6 +341,7 @@ Widget build(BuildContext context) {
             ),
           ),
         ),
+
       ],
     ));
   }

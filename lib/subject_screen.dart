@@ -11,6 +11,17 @@ import 'badge_award_screen.dart'; // Make sure this import is here
 import 'badges_screen.dart'; // We need this for the Badge data class
 import 'sound_back_button.dart';
 
+// Define a simple class to hold lesson data
+class LessonInfo {
+  final String topicId;
+  final int level;
+  final String lessonText;
+
+  LessonInfo({required this.topicId, required this.level, required this.lessonText});
+
+  String get id => "${topicId}_$level"; // Unique ID for caching
+}
+
 class SubjectScreen extends StatefulWidget {
   final String subjectName;
   const SubjectScreen({super.key, required this.subjectName});
@@ -29,6 +40,15 @@ class _SubjectScreenState extends State<SubjectScreen> {
   int _currentTopicIndex = 0;
   String? _topicName;
   List<String>? _suggestedQuestions;
+
+  List<String> _allTopicIds = []; // Stores all topic IDs for the current subject
+  List<String> _topicOrder = []; // Stores the ordered topics if available
+  List<String> _completedTopics = []; // Stores the user's completed topics
+
+  // Helper to generate a unique ID for each lesson for caching
+  String _getLessonId(String topicId, int level) {
+    return "${widget.subjectName.toLowerCase()}_${topicId}_$level";
+  }
 
   @override
   void initState() {
@@ -64,26 +84,22 @@ class _SubjectScreenState extends State<SubjectScreen> {
       if (!progressSnapshot.exists) throw Exception("Could not find progress.");
       _currentLevel = progressSnapshot.data()?['currentLevel'] ?? 1;
 
-      final topicOrderData = subjectDoc.data()?['topicOrder'];
+      // Populate new state variables
+      _topicOrder = List<String>.from(subjectDoc.data()?['topicOrder'] ?? []);
+      final topicsSnapshot = await subjectDoc.reference.collection('topics').get();
+      _allTopicIds = topicsSnapshot.docs.map((doc) => doc.id).toList();
+      _completedTopics = List<String>.from(progressSnapshot.data()?['completedTopics'] ?? []);
 
-      if (topicOrderData != null &&
-          topicOrderData is List &&
-          topicOrderData.isNotEmpty) {
-        final List<String> topicOrder = List<String>.from(topicOrderData);
+
+      if (_topicOrder.isNotEmpty) {
         _currentTopicIndex = progressSnapshot.data()?['currentTopicIndex'] ?? 0;
-        if (_currentTopicIndex >= topicOrder.length)
+        if (_currentTopicIndex >= _topicOrder.length)
           throw Exception("All ordered topics completed!");
-        _currentTopicId = topicOrder[_currentTopicIndex];
+        _currentTopicId = _topicOrder[_currentTopicIndex];
       } else {
-        final topicsSnapshot =
-            await subjectDoc.reference.collection('topics').get();
-        final allTopicIds = topicsSnapshot.docs.map((doc) => doc.id).toList();
-        final List<String> completedTopics = List<String>.from(
-          progressSnapshot.data()?['completedTopics'] ?? [],
-        );
         final availableTopics =
-            allTopicIds
-                .where((topicId) => !completedTopics.contains(topicId))
+            _allTopicIds
+                .where((topicId) => !_completedTopics.contains(topicId))
                 .toList();
         if (availableTopics.isEmpty)
           throw Exception("All non-linear topics completed!");
@@ -120,6 +136,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
           }
           _isLoading = false;
         });
+        _performPreFetching(); // Call pre-fetching after current lesson is loaded
       } else {
         await _completeTopic();
       }
@@ -137,6 +154,85 @@ class _SubjectScreenState extends State<SubjectScreen> {
     }
   }
 
+  Future<void> _performPreFetching() async {
+    print("AUDIO_CACHE: Starting pre-fetch process...");
+    final subjectId = widget.subjectName.toLowerCase();
+    List<LessonInfo> allLessonsInSubject = [];
+
+    // 1. Get all topics and their levels for the current subject
+    for (String topicId in _allTopicIds) {
+      final levelsSnapshot = await FirebaseFirestore.instance
+          .collection('subjects')
+          .doc(subjectId)
+          .collection('topics')
+          .doc(topicId)
+          .collection('levels')
+          .get();
+
+      for (var levelDoc in levelsSnapshot.docs) {
+        final level = int.parse(levelDoc.id);
+        final lessonText = levelDoc.data()['lessonText'] as String?;
+        if (lessonText != null) {
+          allLessonsInSubject.add(LessonInfo(topicId: topicId, level: level, lessonText: lessonText));
+        }
+      }
+    }
+
+    // Sort lessons by topic order and then by level
+    allLessonsInSubject.sort((a, b) {
+      int topicIndexA = _topicOrder.indexOf(a.topicId);
+      int topicIndexB = _topicOrder.indexOf(b.topicId);
+
+      if (topicIndexA != topicIndexB) {
+        if (_topicOrder.isNotEmpty) {
+          return topicIndexA.compareTo(topicIndexB);
+        } else {
+          return a.topicId.compareTo(b.topicId);
+        }
+      }
+      return a.level.compareTo(b.level);
+    });
+    print("AUDIO_CACHE: All lessons in subject: ${allLessonsInSubject.map((l) => l.id).toList()}");
+
+    // 2. Filter uncompleted lessons and identify the current lesson's index
+    List<LessonInfo> uncompletedLessons = [];
+    int currentLessonIndex = -1;
+
+    for (int i = 0; i < allLessonsInSubject.length; i++) {
+      final lesson = allLessonsInSubject[i];
+      bool isTopicCompleted = _completedTopics.contains(lesson.topicId);
+      bool isLevelCompletedForCurrentTopic = (lesson.topicId == _currentTopicId && lesson.level < _currentLevel);
+
+      if (!isTopicCompleted && !isLevelCompletedForCurrentTopic) {
+        uncompletedLessons.add(lesson);
+        if (lesson.topicId == _currentTopicId && lesson.level == _currentLevel) {
+          currentLessonIndex = uncompletedLessons.length - 1;
+        }
+      }
+    }
+    print("AUDIO_CACHE: Uncompleted lessons: ${uncompletedLessons.map((l) => l.id).toList()}");
+    print("AUDIO_CACHE: Current lesson index: $currentLessonIndex");
+
+
+    // 3. Identify the next 3 lessons to pre-fetch
+    List<LessonInfo> lessonsToPreFetch = [];
+    if (currentLessonIndex != -1) {
+      for (int i = 0; i < 3; i++) {
+        int preFetchIndex = currentLessonIndex + i;
+        if (preFetchIndex < uncompletedLessons.length) {
+          lessonsToPreFetch.add(uncompletedLessons[preFetchIndex]);
+        }
+      }
+    }
+    print("AUDIO_CACHE: Lessons to pre-fetch: ${lessonsToPreFetch.map((l) => l.id).toList()}");
+
+
+    // 4. Pre-fetch audio for identified lessons
+    for (var lesson in lessonsToPreFetch) {
+      SoundManager.preFetchSpeech(lesson.lessonText, _getLessonId(lesson.topicId, lesson.level));
+    }
+  }
+
   // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   // THE CORRECTED _completeTopic FUNCTION
   // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -151,6 +247,9 @@ class _SubjectScreenState extends State<SubjectScreen> {
       });
       return; // Stop execution here
     }
+
+    print("AUDIO_CACHE: Completing topic: $_currentTopicId");
+
 
     try {
       // 1. Award the badge ID to the user's profile.
@@ -197,6 +296,20 @@ class _SubjectScreenState extends State<SubjectScreen> {
         .collection('progress')
         .doc(subjectId);
 
+    // Clear cached audio for the completed topic's levels
+    final levelsSnapshot = await FirebaseFirestore.instance
+        .collection('subjects')
+        .doc(subjectId)
+        .collection('topics')
+        .doc(_currentTopicId)
+        .collection('levels')
+        .get();
+    for (var levelDoc in levelsSnapshot.docs) {
+      final lessonId = _getLessonId(_currentTopicId, int.parse(levelDoc.id));
+      print("AUDIO_CACHE: Clearing audio for completed topic lesson: $lessonId");
+      SoundManager.clearCachedAudio(lessonId);
+    }
+
     await progressDocRef.update({
       'completedTopics': FieldValue.arrayUnion([_currentTopicId]),
     });
@@ -227,6 +340,11 @@ class _SubjectScreenState extends State<SubjectScreen> {
         .doc(user.uid)
         .collection('progress')
         .doc(subjectId);
+
+    // Clear cached audio for the completed level
+    final lessonId = _getLessonId(_currentTopicId, _currentLevel);
+    print("AUDIO_CACHE: Leveling up. Clearing audio for completed lesson: $lessonId");
+    SoundManager.clearCachedAudio(lessonId);
 
     await progressDocRef.update({'currentLevel': FieldValue.increment(1)});
     _fetchCurrentLesson();
@@ -266,6 +384,8 @@ class _SubjectScreenState extends State<SubjectScreen> {
             topicName: _topicName ?? widget.subjectName,
             currentLevel: _currentLevel,
             totalLevelsInTopic: totalLevelsInTopic,
+            subjectName: widget.subjectName,
+            topicId: _currentTopicId,
           ),
         ),
       );
@@ -367,7 +487,9 @@ class _SubjectScreenState extends State<SubjectScreen> {
                     icon: Image.asset("assets/images/speaker_icon.png"),
                     iconSize: 36,
                     onPressed: () {
-                      SoundManager.speak(_lessonText!);
+                      if (_lessonText != null && _currentTopicId.isNotEmpty) {
+                        SoundManager.speak(_lessonText!, _getLessonId(_currentTopicId, _currentLevel));
+                      }
                     },
                   ),
                 ),

@@ -10,6 +10,8 @@ class QuizScreen extends StatefulWidget {
   final String topicName;
   final int currentLevel;
   final int totalLevelsInTopic;
+  final String subjectName;
+  final String topicId;
 
   const QuizScreen({
     super.key,
@@ -17,6 +19,8 @@ class QuizScreen extends StatefulWidget {
     required this.topicName,
     required this.currentLevel,
     required this.totalLevelsInTopic,
+    required this.subjectName,
+    required this.topicId,
   });
 
   @override
@@ -33,6 +37,10 @@ class _QuizScreenState extends State<QuizScreen> {
   void initState() {
     super.initState();
     _loadAndShuffleOptions();
+  }
+
+  String _getQuestionId(int questionIndex) {
+    return "${widget.subjectName.toLowerCase()}_${widget.topicId}_${widget.currentLevel}_q$questionIndex";
   }
 
   void _loadAndShuffleOptions() {
@@ -280,7 +288,7 @@ class _QuizScreenState extends State<QuizScreen> {
                           icon: Image.asset("assets/images/speaker_icon.png"),
                           iconSize: 36,
                           onPressed: () {
-                            SoundManager.speak(questionText);
+                            SoundManager.speak(questionText, _getQuestionId(_currentQuestionIndex));
                           },
                         ),
                       ],
