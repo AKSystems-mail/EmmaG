@@ -1,0 +1,50 @@
+{
+    "name": "Emma G Adventures",
+    "short_name": "Emma G",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#F4EBD0",
+    "theme_color": "#5D4037",
+    "description": "A whimsical, Ghibli-inspired educational adventure for 1st graders. Learn Math, Reading, Science, and more through interactive storybooks!",
+    "orientation": "portrait-primary",
+    "categories": ["education", "games", "kids"],
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ],
+    "screenshots": [
+        {
+            "src": "assets/images/main_background.png",
+            "type": "image/png",
+            "sizes": "1080x1920",
+            "label": "The Adventure Path"
+        },
+        {
+            "src": "assets/images/trophy_room.png",
+            "type": "image/png",
+            "sizes": "1080x1920",
+            "label": "Your Trophy Room"
+        }
+    ]
+}
