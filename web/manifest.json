@@ -3,11 +3,10 @@
     "short_name": "Emma G",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#F4EBD0",
-    "theme_color": "#5D4037",
-    "description": "A whimsical, Ghibli-inspired educational adventure for 1st graders. Learn Math, Reading, Science, and more through interactive storybooks!",
+    "background_color": "#388E3C",
+    "theme_color": "#388E3C",
+    "description": "An interactive educational app for early elementary school children.",
     "orientation": "portrait-primary",
-    "categories": ["education", "games", "kids"],
     "prefer_related_applications": false,
     "icons": [
         {
@@ -31,20 +30,6 @@
             "sizes": "512x512",
             "type": "image/png",
             "purpose": "maskable"
-        }
-    ],
-    "screenshots": [
-        {
-            "src": "assets/images/main_background.png",
-            "type": "image/png",
-            "sizes": "1080x1920",
-            "label": "The Adventure Path"
-        },
-        {
-            "src": "assets/images/trophy_room.png",
-            "type": "image/png",
-            "sizes": "1080x1920",
-            "label": "Your Trophy Room"
         }
     ]
 }

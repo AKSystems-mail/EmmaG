@@ -1,45 +1,12 @@
+# Location: generate_content.py
+
 import os
 import json
 import time
-from google import genai
-from vertexai.preview.vision_models import ImageGenerationModel
-import vertexai
+import google.generativeai as genai
 
 # --- CONFIGURATION ---
-API_KEY = os.environ.get("GEMINI_API_KEY")
-PROJECT_ID = "emma-g-adventures" # Default project ID
-LOCATION = "us-central1"
-SERVICE_ACCOUNT_KEY_PATH = "service-account-key.json"
-
-# Set credentials for Vertex AI
-if os.path.exists(SERVICE_ACCOUNT_KEY_PATH):
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = SERVICE_ACCOUNT_KEY_PATH
-    print(f"✅ Vertex AI Authenticated using {SERVICE_ACCOUNT_KEY_PATH}")
-
-vertexai.init(project=PROJECT_ID, location=LOCATION)
-# Using Imagen 4 Fast as requested
-imagen_model = ImageGenerationModel.from_pretrained("imagen-4.0-fast-generate-001")
-
-
-if API_KEY:
-    print("✅ Loading API Key from Environment Variable (GEMINI_API_KEY)")
-else:
-    # Try loading from .runtimeconfig.json
-    try:
-        with open(".runtimeconfig.json", "r") as f:
-            config = json.load(f)
-            API_KEY = config.get("gemini", {}).get("key")
-            if API_KEY:
-                print("✅ Loading API Key from .runtimeconfig.json")
-    except FileNotFoundError:
-        pass
-
-if not API_KEY:
-    print("❌ ERROR: No API Key found in Environment or .runtimeconfig.json")
-    API_KEY = "INSERT_YOUR_API_KEY_HERE" 
-
-# Initialize the new Google GenAI client
-client = genai.Client(api_key=API_KEY)
+API_KEY = "REDACTED" 
 
 # ==============================================================================
 # THE CURRICULUM LIBRARY
@@ -97,281 +64,92 @@ WORLD_CURRICULUM = [
     ("Famous World Landmarks (Eiffel Tower, Pyramids)", "world_landmarks", 901),
     ("Long Ago and Today (Past and Present)", "past_and_present", 1001),
 ]
+# Add your READING_CURRICULUM, SCIENCE_CURRICULUM, etc. here
 
 # --- THE SCRIPT ---
 def generate_lesson_content(topic_name: str, subject: str, difficulty_code: int, level_number: int):
     """Generates lesson content and quiz questions using the Generative AI model."""
 
-    # Custom Prompt for READING (Cohesive Story/Scene)
-    if subject == "Reading":
-        prompt = f"""
-        You are an expert literacy curriculum developer for 1st graders.
-        Your task is to create a cohesive 3-part lesson based on a SINGLE visual scene.
+    prompt = f"""
+    You are an expert curriculum developer and a fun, engaging 1st-grade teacher with a PhD in childhood education.
+    Your task is to generate a lesson and a multiple-choice quiz for a specific level in an educational app.
 
-        **Topic:** {topic_name}
-        **Subject:** Reading
-        **Level:** {level_number} / 10
-        **Difficulty Code:** {difficulty_code}
+    **Your Persona:**
+    - Your tone is encouraging, gentle, and full of wonder.
+    - You explain concepts by using simple, real-world analogies that a 6-year-old can relate to.
+    - You avoid overly simplistic or repetitive phrasing. Each level should feel fresh and unique.
 
-        **Strict Guidelines:** 
-        1. Define a SINGLE, rich visual scene (e.g., "A cozy garden").
-        2. Write 3 simple sentences. EACH sentence must describe a different detail of THAT SAME SCENE.
-        3. **VISUAL CONSISTENCY:** Every object or noun mentioned in your sentences MUST be explicitly included in the image description. If you say "The cat has a ball," the image description must mention a cat and a ball.
-        4. **KEYWORDS:** Identify EXACTLY ONE concrete noun per sentence to map to an emoji. Choose the word that is most important to the visual scene.
+    **Topic:** {topic_name}
+    **Subject:** {subject}
+    **Current Level:** {level_number} out of 10 
+    **Difficulty Code:** {difficulty_code}
 
-        **Requirements:**
-        1.  **Slides:** Create exactly 3 slides.
-            -   **Text:** 1 simple sentence (max 12 words) describing a part of the scene.
-            -   **Image Prompt:** The exact same "Master Scene" description for ALL 3 slides. Use "Studio Ghibli" hand-painted, whimsical anime style. Be very descriptive about all objects mentioned in the sentences.
-            -   **Keywords:** MUST be a JSON object (Map) with exactly ONE entry (e.g., {{"cat": "🐱"}}).
+    **CRITICAL RULES FOR THIS TASK:**
+    1.  **Analogy Variety:** You MUST use a completely different real-world analogy or scenario for each level.
+    2.  **Phrasing Variety:** You MUST avoid starting every lesson with repetitive phrases.
+    3.  **Difficulty Scaling:** The lesson text and quiz question for level {level_number} MUST be slightly more complex.
 
-        2.  **Quiz:** 1 Multiple Choice Question related to the scene.
-        3.  **Output:** Raw JSON only.
+    **Instructions:**
+    1.  **Lesson Text:** Write a simple, one or two-sentence explanation of the topic.
+    2.  **Quiz:** Create ONE multiple-choice quiz question that directly tests the concept.
+    3.  **JSON Output:** Provide the output as a single, raw JSON object with NO explanatory text or markdown.
 
-        **JSON Schema:**
-        {{
-          "topicName": "{topic_name}",
-          "difficulty": {difficulty_code},
-          "slides": [
-            {{
-              "text": "...",
-              "imagePrompt": "...",
-              "keywords": {{"word": "emoji"}},
-              "localImagePath": "..."
-            }},
-            ... (3 slides)
-          ],
-          "quiz": [
-            {{
-              "question": "...",
-              "imagePrompt": "...",
-              "options": ["A", "B", "C", "D"],
-              "correctAnswer": "..."
-            }}
-          ],
-          "suggestedQuestions": ["...", "..."]
-        }}
-        """
-    else:
-        # Standard Prompt for other subjects (Math, Science, World)
-        prompt = f"""
-        You are an expert curriculum developer and a fun, engaging 1st-grade teacher.
-        Your task is to generate a multi-slide lesson and a quiz for a specific level.
+    **JSON Schema:**
+    - "topicName": (String) The human-readable topic name. Use the exact Topic I provided: "{topic_name}".
+    - "lessonText": (String) The lesson text you wrote.
+    - "difficulty": (Number) The difficulty code I provided.
+    - "quiz": (Array of 1 Map Object)
+        - "question": (String) The quiz question.
+        - "options": (Array of 4 Strings) The answer choices.
+        - "correctAnswer": (String) The correct answer.
+    - "suggestedQuestions": (Array of 2-3 Strings) Simple, relevant questions a child might ask.
+    """
 
-        **Topic:** {topic_name}
-        **Subject:** {subject}
-        **Level:** {level_number} / 10
-        **Difficulty Code:** {difficulty_code}
-
-        **Target Audience:** 6-year-olds. They cannot read large blocks of text.
-        **Goal:** Visual learning with simple text.
-
-        **Requirements:**
-        1.  **Slides:** Create exactly 3 slides.
-            -   **Text:** 1 simple sentence (max 12 words).
-            -   **Image Prompt:** A detailed description for an AI image generator. 
-                - **STYLE:** Must be in the "Studio Ghibli" hand-painted, whimsical anime style. 
-                - **CONTENT:** Focus purely on the educational subject.
-                - **AUDIENCE:** 1st-grade appropriate.
-            -   **Keywords:** Identify 1-2 difficult or key words in the sentence and map them to a simple emoji or icon name (e.g., {{'apple': '🍎', 'add': 'plus_icon'}}).
-
-        2.  **Quiz:** 1 Multiple Choice Question. Include an 'imagePrompt' that illustrates the question.
-        3.  **Output:** Raw JSON only.
-
-        **JSON Schema:**
-        {{
-          "topicName": "{topic_name}",
-          "difficulty": {difficulty_code},
-          "slides": [
-            ... (3 slides)
-          ],
-          "quiz": [
-            {{
-              "question": "...",
-              "imagePrompt": "...",
-              "options": ["A", "B", "C", "D"],
-              "correctAnswer": "..."
-            }}
-          ],
-          "suggestedQuestions": ["...", "..."]
-        }}
-        """
-
-    # Optimized for Best Price: Using Gemini 2.0 Flash-Lite ($0.075 / 1M tokens)
-    response = client.models.generate_content(
-        model='gemini-2.0-flash-lite',
-        contents=prompt
-    )
+    model = genai.GenerativeModel('gemini-2.0-flash')
+    response = model.generate_content(prompt)
 
     cleaned_response_text = response.text.strip().replace("```json", "").replace("```", "")
     return json.loads(cleaned_response_text)
 
-def generate_image_for_slide(prompt: str, output_path: str):
-    """
-    Calls the Imagen 4 Fast API to generate an image and saves it locally.
-    """
-    print(f"    [🎨 GENERATING IMAGE] Prompt: {prompt[:50]}...")
-    
-    try:
-        # Generate the image
-        response = imagen_model.generate_images(
-            prompt=prompt,
-            number_of_images=1,
-            language="en",
-            aspect_ratio="1:1",
-            safety_filter_level="block_few",
-            person_generation="allow_adult"
-        )
-        
-        if response.images and len(response.images) > 0:
-            image = response.images[0]
-            # Check if image has content before saving
-            try:
-                if hasattr(image, '_image_bytes') and image._image_bytes:
-                    image.save(location=output_path, include_generation_parameters=False)
-                    print(f"    [💾 SAVED] To: {output_path}")
-                else:
-                    print(f"    [⚠️ WARNING] Image object has no content (likely blocked by safety filters).")
-            except Exception as save_error:
-                 print(f"    [❌ ERROR] Failed to save image object: {save_error}")
-        else:
-            print(f"    [⚠️ WARNING] No images returned from API.")
-            
-    except Exception as e:
-        print(f"    [❌ ERROR] Image generation failed: {e}")
-
 
 def main():
     """Main function to generate all content for the defined curriculum."""
+    genai.configure(api_key=API_KEY)
     
-    # Define all curricula to process
-    all_curricula = [
-        ("Math", MATH_CURRICULUM),
-        ("Reading", READING_CURRICULUM),
-        ("Science", SCIENCE_CURRICULUM),
-        ("World", WORLD_CURRICULUM),
-    ]
+    current_curriculum = MATH_CURRICULUM # Change this to select other curriculums
+    current_subject_name = "Math"       # Make sure this matches the curriculum
     
-    for current_subject_name, current_curriculum in all_curricula:
-        # TEST: Process only the "Reading" subject for the initial full-subject test
-        if current_subject_name != "Reading":
-            continue
-
-        print(f"\n==================================================")
-        print(f"Starting CONTENT FACTORY 2.0 for {current_subject_name}...")
-        print(f"==================================================")
+    print(f"Starting content generation for the {current_subject_name} curriculum...")
     
-        for topic_name, topic_id, start_difficulty in current_curriculum:
-            # FOCUS: Process ONLY 'main_idea'
-            if topic_id != "main_idea":
-                continue
-
-            print(f"\n--- Processing Topic: {topic_name} ---")
+    for topic_name, topic_id, start_difficulty in current_curriculum:
+        print(f"\n--- Generating Topic: {topic_name} ---")
+        
+        output_dir = os.path.join("generated_content", current_subject_name.lower(), topic_id)
+        os.makedirs(output_dir, exist_ok=True)
+        
+        for i in range(10): # Generate 10 levels
+            level_number = i + 1
+            difficulty_code = start_difficulty + i
             
-            # Generate TOPIC INTRODUCTION
-            intro_prompt = f"""
-            Write a 3-sentence introduction for the topic: '{topic_name}'.
-            The subject is Reading for 1st graders.
-            The tone should be welcoming and educational.
-            Each sentence should be simple (max 12 words).
-            Identify EXACTLY ONE concrete noun in the entire 3-sentence text to highlight with an emoji.
-            
-            Output RAW JSON:
-            {{
-              "text": "The full 3 sentences here.",
-              "keywords": {{"word": "emoji"}}
-            }}
-            """
+            print(f"  Generating Level {level_number} (Difficulty: {difficulty_code})...")
             
             try:
-                intro_response = client.models.generate_content(
-                    model='gemini-2.0-flash-lite',
-                    contents=intro_prompt
-                )
-                intro_json = json.loads(intro_response.text.strip('`').strip('json').strip())
-            except Exception as e:
-                print(f"  ⚠️ Error generating intro for {topic_id}: {e}")
-                intro_json = {
-                    "text": f"Welcome to {topic_name}! We are going to learn all about it today. Let's get started!",
-                    "keywords": {}
-                }
-
-            # Create main directory for JSONs
-            base_output_dir = os.path.join("generated_content", current_subject_name.lower(), topic_id)
-            os.makedirs(base_output_dir, exist_ok=True)
-
-            # Create subdirectory for Assets (Images)
-            images_output_dir = os.path.join("assets", "generated_images", current_subject_name.lower(), topic_id)
-            os.makedirs(images_output_dir, exist_ok=True)
-            
-            for i in range(10): # Full 10 levels for this test subject
-                level_number = i + 1
-                difficulty_code = start_difficulty + i
+                lesson_data = generate_lesson_content(topic_name, current_subject_name, difficulty_code, level_number) 
+                
                 filename = f"level_{level_number}.json"
-                filepath = os.path.join(base_output_dir, filename)
+                filepath = os.path.join(output_dir, filename)
                 
-                # CHECK: Does this file already exist AND do the images exist?
-                skip_generation = False
-                if os.path.exists(filepath):
-                    try:
-                        with open(filepath, 'r') as f:
-                            existing_data = json.load(f)
-                        
-                        # Check for new format indicators: 'slides' list with 3 items
-                        is_new_format = 'slides' in existing_data and len(existing_data['slides']) >= 3
-                        
-                        # Check if at least one image exists on disk
-                        # (We check the quiz image as a proxy for the whole level)
-                        quiz_img_path = os.path.join(images_output_dir, f"{topic_id}_lvl{level_number}_quiz.png")
-                        images_exist = os.path.exists(quiz_img_path)
-
-                        if is_new_format and images_exist:
-                            skip_generation = True
-                    except:
-                        pass
-
-
-                if skip_generation:
-                    continue
-
-                print(f"  ⚡ Generating Level {level_number} (New Format)...")
+                with open(filepath, 'w') as f:
+                    json.dump(lesson_data, f, indent=2)
                 
-                try:
-                    # 1. Generate Text Content
-                    lesson_data = generate_lesson_content(topic_name, current_subject_name, difficulty_code, level_number) 
-                    
-                    # 2. Generate Images for each Slide
-                    for slide_idx, slide in enumerate(lesson_data['slides']):
-                        image_filename = f"{topic_id}_lvl{level_number}_slide{slide_idx + 1}.png"
-                        image_path = os.path.join(images_output_dir, image_filename)
-                        slide['localImagePath'] = f"assets/generated_images/{current_subject_name.lower()}/{topic_id}/{image_filename}"
-                        generate_image_for_slide(slide['imagePrompt'], image_path)
-
-                    # 2b. Generate Image for the Quiz
-                    if 'quiz' in lesson_data and len(lesson_data['quiz']) > 0:
-                        quiz_q = lesson_data['quiz'][0]
-                        if 'imagePrompt' in quiz_q:
-                            quiz_img_filename = f"{topic_id}_lvl{level_number}_quiz.png"
-                            quiz_img_path = os.path.join(images_output_dir, quiz_img_filename)
-                            quiz_q['localImagePath'] = f"assets/generated_images/{current_subject_name.lower()}/{topic_id}/{quiz_img_filename}"
-                            generate_image_for_slide(quiz_q['imagePrompt'], quiz_img_path)
-
-                    # 3. Save JSON
-                    # Include introduction only in Level 1
-                    if level_number == 1:
-                        lesson_data["introduction"] = intro_json
-
-                    with open(filepath, 'w') as f:
-                        json.dump(lesson_data, f, indent=2)
-                    
-                    print(f"  ✅ Saved Level {level_number}")
-                    
-                except Exception as e:
-                    print(f"  ❌ Error Level {level_number}: {e}")
+                print(f"  ✅ Successfully saved to '{filepath}'")
                 
-                time.sleep(2) # Rate limit protection
+            except Exception as e:
+                print(f"  ❌ An error occurred for Level {level_number}: {e}")
+            
+            time.sleep(5) # Respect API rate limits
 
-    print("\n\n✅✅✅ Content Factory 2.0 Complete! ✅✅✅")
+    print("\n\n✅✅✅ All content generation complete! ✅✅✅")
 
 
 if __name__ == "__main__":

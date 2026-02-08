@@ -31,7 +31,7 @@
             echo "Virtual environment created."
           fi
           # Install/upgrade packages into the virtual environment's pip
-          .venv/bin/pip install --upgrade google-genai firebase-admin
+          .venv/bin/pip install --upgrade google-generativeai firebase-admin
           echo "Python packages are ready."
         '';
       };

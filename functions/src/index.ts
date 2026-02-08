@@ -69,10 +69,8 @@ onRequest({cors: true}, async (request, response) => {
         answer it. Instead, you MUST choose ONE of the following three
         friendly responses, and only these responses:
         - "That's a wonderful question! Let's focus on our lesson for now."
-        - "What a curious thought! My job is to help with our lesson, but
-           maybe we can look that up together later!"
-        - "You have such a great imagination! Let's save that question for
-           after our lesson is done."
+        - "What a curious thought! My job is to help with our lesson, but maybe we can look that up together later!"
+        - "You have such a great imagination! Let's save that question for after our lesson is done."
 
     ---
     Topic: "${topicName}"
@@ -85,8 +83,7 @@ onRequest({cors: true}, async (request, response) => {
   `;
 
   try {
-    // Upgraded to Gemini 3 Flash for 2026 compatibility
-    const model = genAI.getGenerativeModel({model: "gemini-3-flash"});
+    const model = genAI.getGenerativeModel({model: "gemini-2.0-flash"});
     const result = await model.generateContent(prompt);
     const res = await result.response;
     const text = res.text();

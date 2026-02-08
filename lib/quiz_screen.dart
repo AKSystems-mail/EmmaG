@@ -273,27 +273,6 @@ class _QuizScreenState extends State<QuizScreen> {
                     // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
                     // THE FIX: The Row containing the question and speaker icon
                     // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-                    if (widget.subjectName.toLowerCase() != 'reading' && 
-                        currentQuestion['localImagePath'] != null && 
-                        (currentQuestion['localImagePath'] as String).isNotEmpty)
-                      Container(
-                        height: 200,
-                        margin: const EdgeInsets.only(bottom: 20),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(15),
-                          border: Border.all(color: Colors.white24),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: Image.asset(
-                          currentQuestion['localImagePath'],
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) {
-                            print("ASSET_ERROR: Quiz image failed: ${currentQuestion['localImagePath']}");
-                            return const Icon(Icons.image, size: 50, color: Colors.white24);
-                          },
-                        ),
-                      ),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,

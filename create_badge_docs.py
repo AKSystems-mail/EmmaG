@@ -82,36 +82,17 @@ def create_badge_documents():
         doc_id = badge_info["doc_id"]
         badge_name = badge_info["name"]
         
-        # Determine the subject folder based on the doc_id
-        subject_folder = "unknown"
-        if doc_id in ["addition_single_digit", "subtraction_single_digit", "counting_to_100", "basic_shapes", "comparing_numbers", "place_value_tens_ones", "basic_measurement", "telling_time_hour_half", "intro_money_coins", "addition_two_digit_no_regroup"]:
-            subject_folder = "math"
-        elif doc_id in ["phonics_short_vowels", "sight_words_basic", "sentence_structure", "word_families", "identifying_nouns", "identifying_verbs", "reading_comprehension_basic", "story_sequencing", "punctuation_marks", "main_idea"]:
-            subject_folder = "reading"
-        elif doc_id in ["living_nonliving", "plant_parts", "animal_types", "five_senses", "weather_types", "four_seasons", "land_water_air", "states_of_matter", "pushes_pulls", "sun_earth_moon"]:
-            subject_folder = "science"
-        elif doc_id in ["families", "community_helpers", "rules_and_laws", "intro_to_maps", "seven_continents", "five_oceans", "world_holidays", "cultures_traditions", "world_landmarks", "past_and_present"]:
-            subject_folder = "world"
-        elif doc_id == "stem_bonus_complete":
-            subject_folder = "bonus"
-
-        # Construct the public URL
-        # Format: https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{path}?alt=media
-        bucket_name = "emma-g-adventures.firebasestorage.app"
-        encoded_path = f"{subject_folder}%2Fbadge_{doc_id}.png"
-        public_url = f"https://firebasestorage.googleapis.com/v0/b/{bucket_name}/o/{encoded_path}?alt=media"
-
         # The data for the new badge document
         badge_data = {
             "name": badge_name,
-            "topicId": doc_id,
-            "imageUrl": public_url 
+            "topicId": doc_id, # Storing the topicId for consistency
+            "imageUrl": PLACEHOLDER_IMAGE_URL 
         }
         
         doc_ref = db.collection('badges').document(doc_id)
         batch.set(doc_ref, badge_data)
         created_count += 1
-        print(f"  Queued for creation: Badge '{badge_name}' -> {public_url}")
+        print(f"  Queued for creation: Badge '{badge_name}' (ID: {doc_id})")
 
         # Commit in batches of 499 to stay within Firestore limits
         if created_count % 499 == 0:

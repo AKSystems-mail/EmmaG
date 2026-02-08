@@ -21,7 +21,6 @@ class _BadgeAwardScreenState extends State<BadgeAwardScreen> {
   @override
   void initState() {
     super.initState();
-    print("DEBUG: BadgeAwardScreen loading image from: ${widget.badge.imageUrl}");
     _confettiController = ConfettiController(duration: const Duration(seconds: 2));
     // Play the level up sound and the confetti when the screen loads
     SoundManager.playLevelUpSound();
@@ -89,8 +88,7 @@ class _BadgeAwardScreenState extends State<BadgeAwardScreen> {
                 TexturedButton(
                   text: "Awesome!",
                   onPressed: () {
-                    // Navigate back to the main menu
-                    Navigator.of(context).popUntil((route) => route.isFirst);
+                    Navigator.of(context).pop(); // Close this screen
                   },
                   texture: ButtonTexture.wood,
                   fontSize: 20,

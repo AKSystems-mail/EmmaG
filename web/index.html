@@ -17,42 +17,6 @@
 
   <title>Emma G Adventures</title>
     <link rel="manifest" href="manifest.json">
-    <style>
-      body {
-        background-color: #F4EBD0;
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-      }
-      .loading-container {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        width: 100vw;
-        background-image: url('assets/images/parchment_background.png');
-        background-size: cover;
-        background-position: center;
-      }
-      .emma-loading {
-        width: 200px;
-        height: 200px;
-        animation: pulse 2s infinite ease-in-out;
-      }
-      @keyframes pulse {
-        0% { transform: scale(1); opacity: 0.8; }
-        50% { transform: scale(1.05); opacity: 1; }
-        100% { transform: scale(1); opacity: 0.8; }
-      }
-      .loading-text {
-        margin-top: 20px;
-        font-family: 'Nunito', sans-serif;
-        color: #5D4037;
-        font-size: 24px;
-        font-weight: bold;
-      }
-    </style>
   
     <script>
       // The value below is injected by flutter build, do not touch.
@@ -62,40 +26,6 @@
     <script src="flutter.js" defer></script>
   </head>
 <body>
-  <div id="loading-indicator" class="loading-container">
-    <img src="assets/images/emma_character_transparent.png" alt="Emma G" class="emma-loading">
-    <div class="loading-text">Starting Adventure...</div>
-  </div>
   <script src="flutter_bootstrap.js" async></script>
-  <script>
-    // Remove the loading indicator once the app has loaded
-    window.addEventListener('flutter-first-frame', function() {
-      var loadingIndicator = document.getElementById('loading-indicator');
-      if (loadingIndicator) {
-        loadingIndicator.remove();
-      }
-    });
-
-    // PWA Install Logic
-    let deferredPrompt;
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredPrompt = e;
-      // You can notify Flutter here if needed
-      window.dispatchEvent(new CustomEvent('pwa-installable'));
-    });
-
-    window.installPWA = function() {
-      if (deferredPrompt) {
-        deferredPrompt.prompt();
-        deferredPrompt.userChoice.then((choiceResult) => {
-          if (choiceResult.outcome === 'accepted') {
-            console.log('User accepted the PWA install prompt');
-          }
-          deferredPrompt = null;
-        });
-      }
-    };
-  </script>
 </body>
 </html>

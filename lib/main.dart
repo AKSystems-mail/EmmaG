@@ -1,11 +1,10 @@
 // Location: lib/main.dart
 
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:js' as js;
+import 'package:cloud_firestore/cloud_firestore.dart';
+// import 'package:audioplayers/audioplayers.dart' as audioplayers;
 import 'firebase_options.dart';
 import 'subject_screen.dart';
 import 'badges_screen.dart';
@@ -141,28 +140,34 @@ class MainMenuScreen extends StatefulWidget {
 
 class _MainMenuScreenState extends State<MainMenuScreen> {
   bool _userHasInteracted = false;
-  bool _isInstallable = false;
 
   static const List<double> _grayscaleMatrix = <double>[
-    0.2126, 0.7152, 0.0722, 0, 0,
-    0.2126, 0.7152, 0.0722, 0, 0,
-    0.2126, 0.7152, 0.0722, 0, 0,
-    0,      0,      0,      1, 0,
+    0.2126,
+    0.7152,
+    0.0722,
+    0,
+    0,
+    0.2126,
+    0.7152,
+    0.0722,
+    0,
+    0,
+    0.2126,
+    0.7152,
+    0.0722,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
   ];
+
 
   @override
   void initState() {
     super.initState();
-    if (kIsWeb) {
-      js.context.callMethod('addEventListener', [
-        'pwa-installable',
-        (event) {
-          setState(() {
-            _isInstallable = true;
-          });
-        }
-      ]);
-    }
   }
 
   void _toggleMusic() {
@@ -316,7 +321,7 @@ Widget build(BuildContext context) {
                       icon: SoundManager.isMusicOn
                           ? Image.asset("assets/images/speaker_icon.png")
                           : ColorFiltered(
-                              colorFilter: ColorFilter.matrix(_grayscaleMatrix),
+                              colorFilter: const ColorFilter.matrix(_grayscaleMatrix),
                               child: Image.asset("assets/images/speaker_icon.png"),
                             ),
                     ),
@@ -331,30 +336,6 @@ Widget build(BuildContext context) {
                       shadows: const [Shadow(blurRadius: 2, color: Colors.black87)],
                     ),
                   ),
-                  if (_isInstallable) ...[
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: (screenWidth * 0.1).clamp(40.0, 70.0),
-                      height: (screenWidth * 0.1).clamp(40.0, 70.0),
-                      child: IconButton(
-                        padding: EdgeInsets.zero,
-                        onPressed: () {
-                          js.context.callMethod('installPWA');
-                        },
-                        icon: Image.asset("assets/images/seed_badge.png"), // Using seed badge as a placeholder icon
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "Install",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: (screenWidth * 0.03).clamp(12.0, 18.0),
-                        shadows: const [Shadow(blurRadius: 2, color: Colors.black87)],
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),

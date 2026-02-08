@@ -45,9 +45,4 @@ app.*.map.json
 /android/app/release
 /android/key.properties
 # Ignore Firebase service account key
-service-account-key.json\n# Python and Node
-.venv/
-node_modules/
-__pycache__/
-*.env
-.runtimeconfig.json
+service-account-key.json

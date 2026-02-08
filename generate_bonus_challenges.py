@@ -4,15 +4,12 @@ import os
 import json
 import time
 import random # To help pick subject combinations
-from google import genai
+import google.generativeai as genai
 
 # --- CONFIGURATION ---
 API_KEY = "REDACTED" # Your Gemini API Key
 TOTAL_CHALLENGES = 50
 CORE_SUBJECTS = ["Math", "Reading", "Science", "World"]
-
-# Initialize the new Google GenAI client
-client = genai.Client(api_key=API_KEY)
 
 # --- THE SCRIPT ---
 
@@ -45,17 +42,16 @@ def generate_single_bonus_challenge(challenge_number, difficulty_score):
     - "explanationText": "(String, Optional) A brief, kid-friendly explanation (1 sentence) of why the correct answer is right. Only include if truly helpful."
     """
     
-    # Using gemini-2.0-flash-lite for best price
-    response = client.models.generate_content(
-        model='gemini-2.0-flash-lite',
-        contents=prompt
-    )
+    model = genai.GenerativeModel('gemini-2.0-flash')
+    response = model.generate_content(prompt)
     
     cleaned_response_text = response.text.strip().replace("```json", "").replace("```", "")
     return json.loads(cleaned_response_text)
 
 
 def main():
+    genai.configure(api_key=API_KEY)
+    
     print("Starting Bonus Challenge generation...")
     
     output_base_dir = "generated_bonus_content"
@@ -85,9 +81,10 @@ def main():
             
         except Exception as e:
             print(f"  ❌ An error occurred for Challenge {challenge_number}: {e}")
+            print(f"     Problematic prompt might have been: {generate_single_bonus_challenge.__doc__}") # Basic way to see part of it
         
-        # Pause to respect API rate limits
-        time.sleep(2)
+        # Pause to respect API rate limits, especially for Pro models
+        time.sleep(5) # Increased pause for Pro model
 
     print(f"\n\n✅✅✅ All {TOTAL_CHALLENGES} bonus challenges generated! ✅✅✅")
 

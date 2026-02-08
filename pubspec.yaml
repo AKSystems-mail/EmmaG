@@ -75,16 +75,6 @@ flutter:
   assets:
     - assets/images/
     - assets/audio/
-    - assets/generated_images/reading/phonics_short_vowels/
-    - assets/generated_images/reading/sight_words_basic/
-    - assets/generated_images/reading/sentence_structure/
-    - assets/generated_images/reading/word_families/
-    - assets/generated_images/reading/identifying_nouns/
-    - assets/generated_images/reading/identifying_verbs/
-    - assets/generated_images/reading/reading_comprehension_basic/
-    - assets/generated_images/reading/story_sequencing/
-    - assets/generated_images/reading/punctuation_marks/
-    - assets/generated_images/reading/main_idea/
 
   fonts:
     - family: Faculty Glyphic
