@@ -45,6 +45,43 @@ The Firebase Functions are located in the `functions` directory.
     firebase deploy --only functions
     ```
 
+## Content Format 2.0 Specification
+
+This project has transitioned to a "Storybook Carousel" format (v2.0). All new content must adhere to these rules:
+
+### 1. Structure (JSON)
+*   **Introduction:** A separate `introduction` object with ~3 warm sentences. **NO emojis and NO keywords map.**
+*   **Single Scene:** One `imagePrompt` per level (Studio Ghibli style). All 3 slides share the same image.
+*   **Slides (Carousel):** Exactly 3 slides. Each slide is a single sentence focusing on **ONE** specific object in the scene.
+*   **Keywords (Visual Vocabulary):** Each slide must have exactly **ONE** keyword entry (`word`: `emoji`).
+*   **No Embedded Emojis:** The AI must not put emojis in the `text` fields. The UI handles emoji display via the `keywords` map.
+*   **Image Path:** `localImagePath` must be relative to the assets folder (e.g., `generated_images/science/topic/level_1.png`) to avoid `assets/assets/` path bugs.
+
+### 2. UI Logic (lib/subject_screen.dart)
+*   **Static Background:** The image from the first slide is used as a static background for the entire level.
+*   **Text Carousel:** The `PageView` is text-only, carouseling through the 3 sentences.
+*   **Cleaning Logic:** The UI strips punctuation and emojis from words before checking the `keywords` map and again before displaying the "Visual Vocabulary" label to prevent redundant emojis.
+
+### 3. Generation Pipeline (Vision-Based Restoration)
+This project uses a "Reclaim and Complete" strategy to transition subjects to 2.0 while reusing existing assets to minimize costs.
+
+#### Workflow Steps:
+1.  **Image Search Priority:** For each level, the script searches for an existing asset in this order:
+    *   `*_lvlX_slide1.png` (Preferred)
+    *   `*_lvlX_slide2.png` (Fallback 1)
+    *   `*_lvlX_slide3.png` (Fallback 2)
+2.  **Fill the Gaps:** If no image is found, the script generates a **new** image using Gemini (to write the prompt) and Imagen 4 Fast.
+3.  **Vision Analysis:** The chosen image (existing or new) is passed to **Gemini 2.0 Flash-Lite (Vision)**.
+4.  **Content Synthesis:** Gemini analyzes the image and writes:
+    *   A warm, text-only **Introduction**.
+    *   A 3-slide **Story** where each sentence matches an object actually visible in that specific image.
+    *   A single-keyword **Visual Vocabulary** map for each slide.
+5.  **Data Cleaning:**
+    *   **Quiz Scrubbing:** All letter prefixes (e.g., "A. ", "B) ") are stripped from quiz options and correct answers.
+    *   **Emoji Stripping:** Emojis are removed from all `text` fields; they only live in the `keywords` map.
+6.  **Incremental Processing:** Process **one topic at a time** to avoid command timeouts.
+7.  **Upload:** `upload_bulk.py` pushes the cleaned 2.0 JSONs to Firestore.
+
 ## Development Conventions
 
 *   **Content Generation:** The `generate_content.py` script is used to generate new educational content. To add new topics, modify the curriculum lists in the script and run it.

@@ -11,13 +11,37 @@ import 'badge_award_screen.dart'; // Make sure this import is here
 import 'badges_screen.dart'; // We need this for the Badge data class
 import 'sound_back_button.dart';
 
+// Define a simple class to hold slide data
+class LessonSlide {
+  final String text;
+  final String? imagePrompt;
+  final String? localImagePath;
+  final Map<String, String> keywords;
+
+  LessonSlide({
+    required this.text,
+    this.imagePrompt,
+    this.localImagePath,
+    required this.keywords,
+  });
+
+  factory LessonSlide.fromJson(Map<String, dynamic> json) {
+    return LessonSlide(
+      text: json['text'] ?? '',
+      imagePrompt: json['imagePrompt'],
+      localImagePath: json['localImagePath'],
+      keywords: Map<String, String>.from(json['keywords'] ?? {}),
+    );
+  }
+}
+
 // Define a simple class to hold lesson data
 class LessonInfo {
   final String topicId;
   final int level;
-  final String lessonText;
+  final List<LessonSlide> slides;
 
-  LessonInfo({required this.topicId, required this.level, required this.lessonText});
+  LessonInfo({required this.topicId, required this.level, required this.slides});
 
   String get id => "${topicId}_$level"; // Unique ID for caching
 }
@@ -32,7 +56,10 @@ class SubjectScreen extends StatefulWidget {
 
 class _SubjectScreenState extends State<SubjectScreen> {
   bool _isLoading = true;
-  String? _lessonText;
+  List<LessonSlide> _slides = [];
+  int _currentSlideIndex = 0;
+  final PageController _pageController = PageController();
+  
   List<Map<String, dynamic>>? _quizData;
   String? _errorMessage;
   int _currentLevel = 1;
@@ -40,6 +67,8 @@ class _SubjectScreenState extends State<SubjectScreen> {
   int _currentTopicIndex = 0;
   String? _topicName;
   List<String>? _suggestedQuestions;
+  bool _showIntroduction = false;
+  LessonSlide? _introSlide;
 
   List<String> _allTopicIds = []; // Stores all topic IDs for the current subject
   List<String> _topicOrder = []; // Stores the ordered topics if available
@@ -121,7 +150,21 @@ class _SubjectScreenState extends State<SubjectScreen> {
         final data = lessonDocSnapshot.data();
         setState(() {
           if (data != null) {
-            _lessonText = data['lessonText'];
+            // Handle legacy data (string) or new data (list of slides)
+            if (data['slides'] is List) {
+              _slides = (data['slides'] as List)
+                  .map((s) => LessonSlide.fromJson(s))
+                  .toList();
+            } else if (data['lessonText'] is String) {
+              // Legacy support: Wrap old text in a single slide
+              _slides = [
+                LessonSlide(
+                  text: data['lessonText'],
+                  keywords: {},
+                )
+              ];
+            }
+
             _quizData =
                 data['quiz'] is List
                     ? List<Map<String, dynamic>>.from(data['quiz'])
@@ -131,8 +174,25 @@ class _SubjectScreenState extends State<SubjectScreen> {
                     ? List<String>.from(data['suggestedQuestions'])
                     : null;
             _topicName = data['topicName'];
+            _currentSlideIndex = 0;
+
+            // Check if we should show the introduction
+            if (_currentLevel == 1) {
+              _showIntroduction = true;
+              if (data['introduction'] != null) {
+                _introSlide = LessonSlide.fromJson(data['introduction']);
+              } else {
+                // Default if no intro provided in Firestore yet
+                _introSlide = LessonSlide(
+                  text: "Welcome to $_topicName! Let's learn something new together.",
+                  keywords: {},
+                );
+              }
+            } else {
+              _showIntroduction = false;
+            }
           } else {
-            _lessonText = "Lesson content is empty.";
+            _slides = [LessonSlide(text: "Lesson content is empty.", keywords: {})];
           }
           _isLoading = false;
         });
@@ -146,7 +206,7 @@ class _SubjectScreenState extends State<SubjectScreen> {
               ? "Wow! You've mastered all the topics in ${widget.subjectName}!"
               : "An error occurred. Please try again.";
       setState(() {
-        _lessonText = message;
+        _slides = [LessonSlide(text: message, keywords: {})];
         _quizData = null;
         _isLoading = false;
       });
@@ -171,13 +231,22 @@ class _SubjectScreenState extends State<SubjectScreen> {
 
       for (var levelDoc in levelsSnapshot.docs) {
         final level = int.parse(levelDoc.id);
-        final lessonText = levelDoc.data()['lessonText'] as String?;
-        if (lessonText != null) {
-          allLessonsInSubject.add(LessonInfo(topicId: topicId, level: level, lessonText: lessonText));
+        final data = levelDoc.data();
+        List<LessonSlide> slides = [];
+        
+        if (data['slides'] is List) {
+          slides = (data['slides'] as List).map((s) => LessonSlide.fromJson(s)).toList();
+        } else if (data['lessonText'] is String) {
+          slides = [LessonSlide(text: data['lessonText'], keywords: {})];
+        }
+
+        if (slides.isNotEmpty) {
+          allLessonsInSubject.add(LessonInfo(topicId: topicId, level: level, slides: slides));
         }
       }
     }
-
+    // ... (sorting and identifying lessons remains same)
+    
     // Sort lessons by topic order and then by level
     allLessonsInSubject.sort((a, b) {
       int topicIndexA = _topicOrder.indexOf(a.topicId);
@@ -192,7 +261,6 @@ class _SubjectScreenState extends State<SubjectScreen> {
       }
       return a.level.compareTo(b.level);
     });
-    print("AUDIO_CACHE: All lessons in subject: ${allLessonsInSubject.map((l) => l.id).toList()}");
 
     // 2. Filter uncompleted lessons and identify the current lesson's index
     List<LessonInfo> uncompletedLessons = [];
@@ -210,26 +278,22 @@ class _SubjectScreenState extends State<SubjectScreen> {
         }
       }
     }
-    print("AUDIO_CACHE: Uncompleted lessons: ${uncompletedLessons.map((l) => l.id).toList()}");
-    print("AUDIO_CACHE: Current lesson index: $currentLessonIndex");
-
 
     // 3. Identify the next 3 lessons to pre-fetch
-    List<LessonInfo> lessonsToPreFetch = [];
     if (currentLessonIndex != -1) {
       for (int i = 0; i < 3; i++) {
         int preFetchIndex = currentLessonIndex + i;
         if (preFetchIndex < uncompletedLessons.length) {
-          lessonsToPreFetch.add(uncompletedLessons[preFetchIndex]);
+          final lesson = uncompletedLessons[preFetchIndex];
+          // Pre-fetch audio for every slide in these lessons
+          for (int sIdx = 0; sIdx < lesson.slides.length; sIdx++) {
+            SoundManager.preFetchSpeech(
+              lesson.slides[sIdx].text, 
+              "${_getLessonId(lesson.topicId, lesson.level)}_slide$sIdx"
+            );
+          }
         }
       }
-    }
-    print("AUDIO_CACHE: Lessons to pre-fetch: ${lessonsToPreFetch.map((l) => l.id).toList()}");
-
-
-    // 4. Pre-fetch audio for identified lessons
-    for (var lesson in lessonsToPreFetch) {
-      SoundManager.preFetchSpeech(lesson.lessonText, _getLessonId(lesson.topicId, lesson.level));
     }
   }
 
@@ -306,8 +370,10 @@ class _SubjectScreenState extends State<SubjectScreen> {
         .get();
     for (var levelDoc in levelsSnapshot.docs) {
       final lessonId = _getLessonId(_currentTopicId, int.parse(levelDoc.id));
-      print("AUDIO_CACHE: Clearing audio for completed topic lesson: $lessonId");
-      SoundManager.clearCachedAudio(lessonId);
+      print("AUDIO_CACHE: Clearing audio for completed topic lesson slides: $lessonId");
+      for (int i = 0; i < 5; i++) {
+        SoundManager.clearCachedAudio("${lessonId}_slide$i");
+      }
     }
 
     await progressDocRef.update({
@@ -341,10 +407,12 @@ class _SubjectScreenState extends State<SubjectScreen> {
         .collection('progress')
         .doc(subjectId);
 
-    // Clear cached audio for the completed level
+    // Clear cached audio for the completed level's slides
     final lessonId = _getLessonId(_currentTopicId, _currentLevel);
-    print("AUDIO_CACHE: Leveling up. Clearing audio for completed lesson: $lessonId");
-    SoundManager.clearCachedAudio(lessonId);
+    print("AUDIO_CACHE: Leveling up. Clearing audio for completed lesson slides: $lessonId");
+    for (int i = 0; i < 5; i++) {
+      SoundManager.clearCachedAudio("${lessonId}_slide$i");
+    }
 
     await progressDocRef.update({'currentLevel': FieldValue.increment(1)});
     _fetchCurrentLesson();
@@ -425,12 +493,43 @@ class _SubjectScreenState extends State<SubjectScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // This build method is correct and does not need changes.
+    Color appBarColor;
+    Color textColor = Colors.white;
+
+    switch (widget.subjectName.toLowerCase()) {
+      case 'math':
+        appBarColor = const Color(0xFFE53935); // Muted Red
+        textColor = Colors.white;
+        break;
+      case 'science':
+        appBarColor = const Color(0xFFFDD835); // Muted Yellow
+        textColor = Colors.black;
+        break;
+      case 'world':
+        appBarColor = const Color(0xFFFB8C00); // Muted Orange
+        textColor = Colors.black;
+        break;
+      case 'bonus':
+        appBarColor = Colors.green.shade700; // Unchanged
+        textColor = Colors.white;
+        break;
+      case 'reading':
+      default:
+        appBarColor = Colors.green.shade700;
+        textColor = Colors.white;
+        break;
+    }
+
     return Scaffold(
       appBar: AppBar(
-        leading: const SoundBackButton(color: Colors.black),
-        title: Text("${widget.subjectName} - Level $_currentLevel"),
-        backgroundColor: Colors.green.shade700,
+        leading: SoundBackButton(color: textColor == Colors.white ? Colors.white : Colors.black),
+        title: Text(
+          _topicName != null 
+            ? "$_topicName - Level $_currentLevel" 
+            : "${widget.subjectName} - Level $_currentLevel",
+          style: TextStyle(color: textColor),
+        ),
+        backgroundColor: appBarColor,
       ),
       body: Stack(
         children: [
@@ -445,7 +544,50 @@ class _SubjectScreenState extends State<SubjectScreen> {
             ),
           ),
           Container(color: Colors.black.withOpacity(0.4)),
-          Center(child: _buildLessonContent()),
+          Center(child: _showIntroduction ? _buildIntroductionScreen() : _buildLessonContent()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIntroductionScreen() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text(
+            "Introduction",
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              shadows: [Shadow(blurRadius: 4, color: Colors.black87)],
+            ),
+          ),
+          const SizedBox(height: 40),
+          Text(
+            _introSlide!.text,
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              shadows: [Shadow(blurRadius: 4, color: Colors.black87)],
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 60),
+          TexturedButton(
+            text: "Start Level 1",
+            onPressed: () {
+              setState(() {
+                _showIntroduction = false;
+              });
+            },
+            texture: ButtonTexture.wood,
+            fontSize: 20,
+            fixedSize: const Size(220, 60),
+          ),
         ],
       ),
     );
@@ -466,92 +608,354 @@ class _SubjectScreenState extends State<SubjectScreen> {
           textAlign: TextAlign.center,
         ),
       );
-    } else if (_lessonText != null) {
+    } else if (_slides.isNotEmpty) {
+      final isLastSlide = _currentSlideIndex == _slides.length - 1;
+      final bool isReading = widget.subjectName.toLowerCase() == 'reading';
+
       return Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-          // THE NEW, ROBUST LAYOUT FOR THE LESSON AREA
-          // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+          // 1. Progress Indicator (Dots)
           Padding(
-            // Add horizontal padding to the whole content block
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            padding: const EdgeInsets.only(top: 16.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(_slides.length, (index) {
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _currentSlideIndex == index
+                        ? Colors.white
+                        : Colors.white.withOpacity(0.3),
+                  ),
+                );
+              }),
+            ),
+          ),
+
+          // 1.5 STATIC IMAGE (Cohesive for all subjects)
+          if (_slides.isNotEmpty)
+            Expanded(
+              flex: 3,
+              child: _buildImageArea(_slides[0]), // Always show the first slide's image as the background
+            ),
+
+          // 2. The Main Content Carousel (Text only)
+          Expanded(
+            flex: 2,
+            child: PageView.builder(
+              controller: _pageController,
+              onPageChanged: (index) {
+                setState(() {
+                  _currentSlideIndex = index;
+                });
+                // Auto-stop any previous speech
+                SoundManager.stop();
+              },
+              itemCount: _slides.length,
+              itemBuilder: (context, index) {
+                final slide = _slides[index];
+                return _buildTextOnlySlide(slide, index);
+              },
+            ),
+          ),
+
+          // 3. Navigation & Actions
+          Padding(
+            padding: const EdgeInsets.only(bottom: 24.0, left: 16, right: 16),
             child: Column(
-              // Use min to make the column only as tall as its children
               mainAxisSize: MainAxisSize.min,
               children: [
-                // 1. The Speaker Icon, aligned to the right
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: IconButton(
-                    icon: Image.asset("assets/images/speaker_icon.png"),
-                    iconSize: 36,
-                    onPressed: () {
-                      if (_lessonText != null && _currentTopicId.isNotEmpty) {
-                        SoundManager.speak(_lessonText!, _getLessonId(_currentTopicId, _currentLevel));
-                      }
-                    },
+                if (isLastSlide && _quizData != null)
+                  TexturedButton(
+                    text: "Let's Practice!",
+                    onPressed: _launchQuiz,
+                    texture: ButtonTexture.wood,
+                    fontSize: 20,
+                    fixedSize: const Size(280, 70),
+                  )
+                else
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Previous Button (Hidden on first slide)
+                      Opacity(
+                        opacity: _currentSlideIndex > 0 ? 1.0 : 0.0,
+                        child: TexturedButton(
+                          text: "Back",
+                          onPressed: _currentSlideIndex > 0
+                              ? () => _pageController.previousPage(
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeInOut,
+                                  )
+                              : () {}, // Pass empty function instead of null
+                          texture: ButtonTexture.stone,
+                          fixedSize: const Size(120, 60),
+                        ),
+                      ),
+                      // Next Button
+                      TexturedButton(
+                        text: "Next",
+                        onPressed: () => _pageController.nextPage(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                        ),
+                        texture: ButtonTexture.wood,
+                        fixedSize: const Size(120, 60),
+                      ),
+                    ],
                   ),
-                ),
-                // 2. A small, fixed space between the icon and the text
-                const SizedBox(height: 8),
-                // 3. The Lesson Text, which will always be centered
-                Text(
-                  _lessonText!,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    color: Colors.white,
-                    shadows: [Shadow(blurRadius: 2, color: Colors.black87)],
+                const SizedBox(height: 16),
+                TextButton.icon(
+                  icon: const Icon(Icons.auto_stories_sharp, color: Colors.white),
+                  label: const Text(
+                    "Ask For Help",
+                    style: TextStyle(color: Colors.white),
                   ),
-                  textAlign: TextAlign.center,
+                  onPressed: () {
+                    SoundManager.playClickSound();
+                    if (_slides.isNotEmpty && _topicName != null) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ChatScreen(
+                            lessonContext: _slides[_currentSlideIndex].text,
+                            topicName: _topicName!,
+                            suggestedQuestions: _suggestedQuestions,
+                          ),
+                        ),
+                      );
+                    }
+                  },
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 40),
-          // The rest of your buttons are unchanged and will work perfectly.
-          if (_quizData != null)
-            TexturedButton(
-              text: "Let's Practice!",
-              onPressed: _launchQuiz,
-              texture: ButtonTexture.wood,
-              fontSize: 20,
-              fixedSize: const Size(280, 70),
-            ),
-          const SizedBox(height: 20),
-          TextButton.icon(
-            icon: const Icon(Icons.auto_stories_sharp, color: Colors.white),
-            label: const Text(
-              "Ask For Help",
-              style: TextStyle(color: Colors.white),
-            ),
-            onPressed: () {
-              SoundManager.playClickSound();
-              if (_lessonText != null && _topicName != null) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder:
-                        (context) => ChatScreen(
-                          lessonContext: _lessonText!,
-                          topicName: _topicName!,
-                          suggestedQuestions: _suggestedQuestions,
-                        ),
-                  ),
-                );
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("No lesson loaded to ask about!"),
-                  ),
-                );
-              }
-            },
           ),
         ],
       );
     } else {
       return const Text("Welcome to your lesson!");
     }
+  }
+
+  // Helper method to build just the image container
+  Widget _buildImageArea(LessonSlide slide) {
+    String imagePath = slide.localImagePath ?? '';
+    // Fix: Image.asset prepends 'assets/' automatically. 
+    // If the path already starts with 'assets/', we strip it to avoid 'assets/assets/'.
+    if (imagePath.startsWith('assets/')) {
+      imagePath = imagePath.replaceFirst('assets/', '');
+    }
+
+    return Container(
+      margin: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white24, width: 2),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: imagePath.isNotEmpty
+          ? Image.asset(
+              imagePath,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) {
+                print("ASSET_ERROR: Failed to load $imagePath (Original: ${slide.localImagePath})");
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.image_not_supported,
+                          size: 50, color: Colors.white.withOpacity(0.2)),
+                      const SizedBox(height: 8),
+                      Text("Missing Asset: $imagePath",
+                          style: TextStyle(
+                              color: Colors.white.withOpacity(0.2), fontSize: 10)),
+                    ],
+                  ),
+                );
+              },
+            )
+          : const Center(child: Icon(Icons.image, size: 100)),
+    );
+  }
+
+  // Helper method to build text-only slide (for Reading)
+  Widget _buildTextOnlySlide(LessonSlide slide, int index) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // B. The Speaker Icon
+          Align(
+            alignment: Alignment.centerRight,
+            child: IconButton(
+              icon: Image.asset("assets/images/speaker_icon.png"),
+              iconSize: 44,
+              onPressed: () {
+                SoundManager.speak(
+                  slide.text,
+                  "${_getLessonId(_currentTopicId, _currentLevel)}_slide$index",
+                );
+              },
+            ),
+          ),
+
+          // C. The Lesson Text (Chunked)
+          Expanded(
+            flex: 1,
+            child: Center(
+              child: _buildVisualVocabularyText(slide),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSlide(LessonSlide slide, int index) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // A. The Image Area
+          Expanded(
+            flex: 3,
+            child: _buildImageArea(slide),
+          ),
+
+          // B. The Speaker Icon
+          Align(
+            alignment: Alignment.centerRight,
+            child: IconButton(
+              icon: Image.asset("assets/images/speaker_icon.png"),
+              iconSize: 44,
+              onPressed: () {
+                SoundManager.speak(
+                  slide.text,
+                  "${_getLessonId(_currentTopicId, _currentLevel)}_slide$index",
+                );
+              },
+            ),
+          ),
+
+          // C. The Lesson Text (Chunked)
+          Expanded(
+            flex: 1,
+            child: Center(
+              child: _buildVisualVocabularyText(slide),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVisualVocabularyText(LessonSlide slide) {
+    // 1. Strip ALL emojis from the base text first. 
+    // This prevents the "double emoji" bug where AI includes emojis in text AND map.
+    final String cleanText = slide.text.replaceAll(
+      RegExp(r'[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E6}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}]', unicode: true),
+      '',
+    );
+
+    if (slide.keywords.isEmpty) {
+      return Text(
+        cleanText,
+        style: const TextStyle(
+          fontSize: 26,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+          shadows: [Shadow(blurRadius: 4, color: Colors.black87)],
+        ),
+        textAlign: TextAlign.center,
+      );
+    }
+
+    // 2. Split text into words. 
+    // We use a regex that preserves spaces so we don't have to manually add them back.
+    final List<String> words = cleanText.split(RegExp(r'(\s+)'));
+    final List<Widget> spans = [];
+
+    for (String word in words) {
+      if (word.trim().isEmpty) {
+        spans.add(Text(word)); // Preserve whitespace
+        continue;
+      }
+
+      // Clean word for keyword matching (lowercase, no punctuation)
+      final String key = word.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '');
+      
+      if (slide.keywords.containsKey(key)) {
+        // Strip punctuation from display word to keep the box clean
+        final String displayWord = word.replaceAll(RegExp(r'[^\w\s]'), '');
+        // Extract any trailing punctuation to add it back outside the box
+        final String punctuation = word.substring(word.indexOf(displayWord) + displayWord.length);
+
+        spans.add(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            decoration: BoxDecoration(
+              color: Colors.yellow.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.yellow.withOpacity(0.5)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  displayWord, 
+                  style: const TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.yellowAccent,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  slide.keywords[key]!,
+                  style: const TextStyle(fontSize: 24),
+                ),
+              ],
+            ),
+          ),
+        );
+        if (punctuation.isNotEmpty) {
+          spans.add(Text(
+            punctuation,
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ));
+        }
+      } else {
+        spans.add(
+          Text(
+            word,
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              shadows: [Shadow(blurRadius: 4, color: Colors.black87)],
+            ),
+          ),
+        );
+      }
+    }
+
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 8.0, // Add horizontal space between words
+      runSpacing: 4.0, // Add vertical space between lines
+      children: spans,
+    );
   }
 }

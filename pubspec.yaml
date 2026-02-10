@@ -75,6 +75,9 @@ flutter:
   assets:
     - assets/images/
     - assets/audio/
+    - assets/generated_images/math/
+    - assets/generated_images/reading/
+    - assets/generated_images/science/
 
   fonts:
     - family: Faculty Glyphic
