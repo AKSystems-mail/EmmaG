@@ -46,3 +46,21 @@ app.*.map.json
 /android/key.properties
 # Ignore Firebase service account key
 service-account-key.json
+
+# Python virtualenv (content pipeline)
+.venv/
+
+# Node (cloud functions)
+node_modules/
+
+# Generated lesson content + images (regenerated via scripts/generate_content.py)
+generated_content/
+assets/generated_images/
+
+# Env files (secrets)
+.env
+*.env
+.env.*
+!.env.example
+.runtimeconfig.json
+functions/.env.emma-g-adventures
