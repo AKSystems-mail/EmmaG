@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<meta name="theme-color" content="#101c2e" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>Emma Grace's Adventures 2</title>
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="apple-touch-icon" href="/icon-192.png" />
+<style>
+  :root { --cream:#fdf6ec; --lilac:#b79ce8; --ink:#1b1030; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; overflow:hidden; background:#101c2e;
+    font-family: ui-rounded, "Nunito", system-ui, -apple-system, sans-serif; color:var(--cream); }
+  #c { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+
+  #hud { position:fixed; top:0; left:0; padding:calc(10px + env(safe-area-inset-top)) 20px 10px calc(14px + env(safe-area-inset-left));
+    pointer-events:none; text-shadow:0 2px 8px rgba(0,0,0,.45); border-radius:0 0 22px 0;
+    background:linear-gradient(150deg, rgba(14,18,38,.42), rgba(14,18,38,.12) 80%); backdrop-filter:blur(5px); }
+  .title { font-size:15px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; opacity:.85; }
+  #res { display:flex; gap:14px; margin-top:6px; font-size:15px; font-weight:700; }
+  #res span { display:flex; gap:6px; align-items:center; }
+  #res small { font-weight:600; font-size:10px; letter-spacing:.08em; text-transform:uppercase; opacity:.6; }
+  .dot { width:11px; height:11px; border-radius:3px; box-shadow:0 1px 3px rgba(0,0,0,.4); }
+  .dot.wood{background:#6fbf5a} .dot.stone{background:#9aa0aa} .dot.bloom{background:#f2a0c8}
+  .dot.spark{background:#b18ce8} .dot.star{background:#ffd75e;border-radius:50%}
+
+  #mute { position:fixed; top:calc(10px + env(safe-area-inset-top)); right:calc(14px + env(safe-area-inset-right));
+    width:42px; height:42px; border-radius:14px; border:0; background:rgba(20,16,40,.42); color:var(--cream);
+    font-size:17px; backdrop-filter:blur(6px); }
+
+  #prompt { position:fixed; left:50%; bottom:calc(96px + env(safe-area-inset-bottom)); transform:translateX(-50%);
+    padding:10px 18px; border-radius:999px; background:rgba(20,16,40,.62); backdrop-filter:blur(8px);
+    font-size:15px; font-weight:700; white-space:nowrap; }
+
+  #act { position:fixed; right:calc(22px + env(safe-area-inset-right)); bottom:calc(26px + env(safe-area-inset-bottom));
+    width:96px; height:96px; border-radius:50%; border:0; color:#2a1a4a; font-weight:900; font-size:15px;
+    letter-spacing:.04em; background:linear-gradient(160deg,#f7d6ff,#b79ce8);
+    box-shadow:0 10px 26px rgba(0,0,0,.35), inset 0 -3px 0 rgba(0,0,0,.12); }
+
+  #stick { position:fixed; width:118px; height:118px; border-radius:50%; border:2px solid rgba(253,246,236,.22);
+    background:rgba(20,16,40,.18); display:none; pointer-events:none; }
+  #knob { position:absolute; left:50%; top:50%; width:52px; height:52px; margin:-26px 0 0 -26px; border-radius:50%;
+    background:rgba(253,246,236,.55); }
+
+  #toast { position:fixed; left:50%; top:calc(64px + env(safe-area-inset-top)); transform:translateX(-50%) translateY(-8px);
+    padding:9px 18px; border-radius:999px; background:rgba(20,16,40,.7); font-weight:700; font-size:14px;
+    opacity:0; transition:.35s; pointer-events:none; }
+  #toast.on { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  #gate { position:fixed; inset:0; display:none; place-items:center; background:rgba(12,10,26,.55); backdrop-filter:blur(6px); }
+  #gate.on { display:grid; }
+  .card { width:min(520px,88vw); padding:26px 26px 22px; border-radius:26px; text-align:center;
+    background:linear-gradient(170deg,#2a1c4a,#1c1233); box-shadow:0 24px 70px rgba(0,0,0,.5);
+    border:1px solid rgba(183,156,232,.28); }
+  .card h2 { margin:0 0 4px; font-size:15px; letter-spacing:.16em; text-transform:uppercase; color:var(--lilac); }
+  .q { font-size:38px; font-weight:900; margin:12px 0 18px; letter-spacing:.02em; }
+  .choices { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+  .choices button { padding:20px 8px; border-radius:18px; border:1px solid rgba(183,156,232,.3);
+    background:rgba(253,246,236,.06); color:var(--cream); font-size:26px; font-weight:800; }
+  .choices button:active { background:rgba(183,156,232,.28); }
+  .choices button.wrong { background:rgba(240,120,120,.18); border-color:rgba(240,120,120,.5); opacity:.5; }
+  .choices button.right { background:rgba(140,230,160,.28); border-color:rgba(140,230,160,.6); }
+  #fb { min-height:22px; margin-top:14px; font-size:14px; font-weight:700; color:#ffd9a0; opacity:.9; }
+  #skip { margin-top:6px; font-size:13px; opacity:.5; }
+
+  #start { position:fixed; inset:0; display:grid; place-items:center; text-align:center;
+    background:radial-gradient(circle at 50% 40%, #2b2350, #0d1220 70%); }
+  #start h1 { font-size:clamp(28px,7vw,54px); margin:0 0 6px; letter-spacing:.03em; }
+  #start p { margin:0 0 26px; opacity:.72; font-size:15px; max-width:30ch; line-height:1.5; }
+  #go { padding:18px 54px; border-radius:18px; border:0; font-size:18px; font-weight:900; letter-spacing:.14em;
+    text-transform:uppercase; color:#2a1a4a; background:linear-gradient(150deg,#f7d6ff,#b79ce8);
+    box-shadow:0 14px 40px rgba(183,156,232,.35); }
+  .hintline { margin-top:16px; font-size:12px; opacity:.45; }
+
+#obj { font-size:12px; letter-spacing:.02em; opacity:.75; margin-top:4px; max-width:230px; pointer-events:auto; cursor:pointer; }
+#obj b { color:#f2a0c8; font-weight:600; }
+#book, #camp {
+  position:fixed; top:calc(10px + env(safe-area-inset-top)); right:calc(58px + env(safe-area-inset-right));
+  padding:8px 12px; border-radius:12px; border:1px solid rgba(255,255,255,.16);
+  background:rgba(14,18,38,.42); color:#eef; font:600 12px system-ui; backdrop-filter:blur(5px);
+}
+#camp { right:calc(112px + env(safe-area-inset-right)); }
+#vig { position:fixed; inset:0; pointer-events:none; background:radial-gradient(ellipse at 50% 55%, rgba(0,0,0,0) 50%, rgba(4,8,20,.42) 100%); }
+#map {
+  position:fixed; top:calc(52px + env(safe-area-inset-top)); right:calc(10px + env(safe-area-inset-right));
+  width:104px; height:104px; border-radius:50%;
+  background:radial-gradient(circle at 50% 45%, rgba(24,32,58,.55), rgba(10,14,30,.55));
+  border:1px solid rgba(255,255,255,.16); backdrop-filter:blur(5px);
+}
+#bookpanel { position:fixed; inset:0; display:grid; place-items:center; background:rgba(6,9,22,.55); backdrop-filter:blur(6px); z-index:30; }
+#bookpanel[hidden] { display:none; }
+#bookpanel .card { min-width:min(520px,90vw); max-height:86vh; overflow:auto; }
+#booktabs { display:flex; gap:6px; justify-content:center; margin:10px 0 4px; flex-wrap:wrap; }
+#booktabs button { padding:7px 12px; border-radius:999px; border:1px solid rgba(183,156,232,.3); background:transparent; color:#e9dcff; font:700 11px system-ui; }
+#booktabs button.on { background:rgba(183,156,232,.3); }
+#booklist { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px; margin:10px 0; }
+#booklist img { width:100%; border-radius:10px; display:block; }
+#booklist .entry { padding:8px 10px; border-radius:10px; font-size:12px; text-align:left; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.09); }
+#booklist .entry small { display:block; opacity:.5; font-size:10px; margin-top:2px; }
+#map { cursor:pointer; }
+#fade { position:fixed; inset:0; background:#05040a; opacity:0; pointer-events:none; transition:opacity .3s ease; z-index:60; }
+#fade.on { opacity:1; }
+#medal { position:fixed; inset:0; display:grid; place-items:center; pointer-events:none; z-index:62; opacity:0; transition:opacity .35s ease; }
+#medal.on { opacity:1; }
+#medal .mcard { display:flex; flex-direction:column; align-items:center; }
+#medal .coin { width:132px; height:132px; border-radius:50%; display:grid; place-items:center; font-size:64px;
+  background:radial-gradient(circle at 34% 28%, #fffbe0, #f4c85a 42%, #c08a2c 76%, #8c5f1c);
+  box-shadow:0 0 0 7px rgba(255,225,140,.30), 0 0 60px 22px rgba(255,200,90,.38);
+  animation:coinspin 1.5s linear 2; }
+@keyframes coinspin { to { transform:rotateY(720deg); } }
+#medal .mlbl { margin-top:16px; font:700 15px/1.2 system-ui, sans-serif; letter-spacing:.14em; text-transform:uppercase;
+  color:#fff8e0; text-shadow:0 2px 14px rgba(0,0,0,.7); }
+#bigmap { position:fixed; inset:0; display:grid; place-items:center; background:rgba(8,7,18,.30); backdrop-filter:blur(2px); z-index:35; }
+#bigmap[hidden] { display:none; }
+#bigmap .sheet { display:grid; gap:10px; justify-items:center; position:relative; }
+#bigmapc { width:min(78vw,70vh); height:min(78vw,70vh); border-radius:50%;
+  background:radial-gradient(circle at 50% 45%, rgba(20,28,54,.62), rgba(8,12,26,.62));
+  border:1px solid rgba(255,255,255,.22); box-shadow:0 20px 60px rgba(0,0,0,.45); }
+#bigchips { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; max-width:min(78vw,70vh); }
+#bigchips button { padding:7px 12px; border-radius:999px; border:1px solid rgba(255,255,255,.2);
+  background:rgba(20,16,40,.5); color:#efe6ff; font:700 11px ui-rounded, system-ui, sans-serif; }
+#bigchips button.on { background:rgba(242,160,200,.28); border-color:rgba(242,160,200,.65); color:#ffd9ec; }
+#bigclose { position:absolute; top:-10px; right:-10px; width:34px; height:34px; border-radius:50%; border:0;
+  background:rgba(20,16,40,.75); color:#fff; font-size:18px; line-height:1; }
+#mini { position:fixed; left:50%; bottom:calc(122px + env(safe-area-inset-bottom)); transform:translateX(-50%); width:min(340px,66vw); text-align:center; }
+#mini[hidden] { display:none; }
+#mini .track { position:relative; height:12px; border-radius:99px; background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.2); }
+#mini .track i { position:absolute; top:-6px; width:6px; height:22px; border-radius:3px; background:#ffd75e; margin-left:-3px; box-shadow:0 0 10px #ffd75e; }
+#mini span { font-size:11px; opacity:.72; }
+#act.bite { background:linear-gradient(160deg,#ffe9a0,#ffb15e); }
+#photo { position:fixed; right:calc(22px + env(safe-area-inset-right)); top:calc(120px + env(safe-area-inset-top));
+  width:38px; height:38px; border-radius:12px; border:1px solid rgba(255,255,255,.16); background:rgba(14,18,38,.42); color:#eef; font-size:15px; backdrop-filter:blur(5px); }
+#shot { position:fixed; left:50%; bottom:calc(24px + env(safe-area-inset-bottom)); transform:translateX(-50%); display:none;
+  padding:12px 22px; border-radius:14px; border:0; font:800 13px system-ui; letter-spacing:.1em; color:#2a1a4a; background:linear-gradient(150deg,#f7d6ff,#b79ce8); }
+body.photo #hud, body.photo #map, body.photo #book, body.photo #camp, body.photo #mute, body.photo #prompt,
+body.photo #act, body.photo #photo, body.photo #toast, body.photo #vig { display:none !important; }
+body.photo #shot { display:block; }
+#namebox, #paint, #tp, #sleep { position:fixed; inset:0; display:grid; place-items:center; background:rgba(6,9,22,.6); backdrop-filter:blur(6px); z-index:40; }
+#namebox[hidden], #paint[hidden], #tp[hidden], #sleep[hidden] { display:none; }
+  #sleep { z-index:60; }
+#nbin { width:100%; padding:12px; border-radius:12px; border:1px solid rgba(183,156,232,.4); background:rgba(0,0,0,.25); color:#fff; font:600 16px system-ui; text-align:center; margin:12px 0; }
+.row { display:flex; gap:8px; justify-content:center; }
+.row button, #bookclose, #pdone, #tpclose { padding:10px 18px; border-radius:12px; border:1px solid rgba(183,156,232,.35); background:rgba(183,156,232,.18); color:#efe6ff; font:700 12px system-ui; }
+#pc { border-radius:10px; background:#fdf6ec; touch-action:none; width:100%; }
+#sw { display:flex; gap:8px; justify-content:center; margin:10px 0; }
+#sw i { width:26px; height:26px; border-radius:50%; display:block; border:2px solid rgba(255,255,255,.3); }
+#tplist { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:8px; margin:12px 0; }
+#tplist button { padding:12px 8px; border-radius:12px; border:1px solid rgba(183,156,232,.3); background:rgba(255,255,255,.06); color:#efe6ff; font:700 12px system-ui; }
+#booklist { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px; margin:14px 0; }
+#booklist .slot { padding:9px 10px; border-radius:10px; font-size:12px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.09); }
+#booklist .slot.got { background:rgba(242,160,200,.12); border-color:rgba(242,160,200,.4); color:#ffd9ec; }
+#booklist .slot.empty { opacity:.35; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div class="title">Emma Grace's Adventures 2</div>
+  <div id="obj">Looking around…</div>
+  <div id="res"></div>
+</div>
+<button id="mute" aria-label="sound">♪</button>
+<button id="book" aria-label="collection">Book</button>
+<button id="camp" aria-label="make camp">Camp</button>
+<canvas id="map" width="132" height="132" aria-label="map"></canvas>
+<button id="photo" aria-label="photo mode">📷</button>
+<button id="shot">Save postcard</button>
+<div id="vig"></div>
+<div id="prompt" hidden></div>
+<button id="act" hidden>Gather</button>
+<div id="stick"><div id="knob"></div></div>
+<div id="toast"></div>
+<div id="mini" hidden><div class="track"><i id="miniDot"></i></div><span>Tap when the dot is in the middle</span></div>
+
+<div id="bookpanel" hidden>
+  <div class="card">
+    <h2>Emma Grace's Book</h2>
+    <div id="booktabs">
+      <button data-tab="col" class="on">Collection</button>
+      <button data-tab="jrn">Journal</button>
+      <button data-tab="pic">Postcards</button>
+      <button data-tab="bad">Badges</button>
+    </div>
+    <div id="booklist"></div>
+    <div class="row"><button id="foldbtn">Fold a paper boat (2 Bloom)</button></div>
+    <div class="row" style="margin-top:8px"><button id="bookclose">Close</button></div>
+  </div>
+</div>
+
+<div id="gate">
+  <div class="card">
+    <h2 id="gh">Sleepy vines block the way</h2>
+    <div class="q" id="q">…</div>
+    <div class="choices" id="choices"></div>
+    <div id="fb"></div>
+    <div id="skip">Wrong is fine — try as many times as you like.</div>
+  </div>
+</div>
+
+<div id="namebox" hidden>
+  <div class="card"><h2 id="nbtitle">Name it</h2><input id="nbin" maxlength="18" placeholder="My camp" />
+  <div class="row"><button id="nbsave">Save</button><button id="nbcancel">Cancel</button></div></div>
+</div>
+
+<div id="paint" hidden>
+  <div class="card"><h2>Paint something</h2>
+  <canvas id="pc" width="300" height="180"></canvas>
+  <div id="sw"></div>
+  <div class="row"><button id="psave">Save picture</button><button id="pdone">Done</button></div></div>
+</div>
+
+<div id="sleep" hidden>
+  <div class="card" style="max-width:420px;text-align:center">
+    <h2>Emma Grace is asleep</h2>
+    <p>She's tucked into her tent at camp. Fluffy is curled up by the fire.</p>
+    <p style="opacity:.65;margin-top:10px">Come back after 5:00 am.</p>
+  </div>
+</div>
+
+<div id="tp" hidden>
+  <div class="card"><h2>Where to?</h2><div id="tplist"></div>
+  <div class="row"><button id="tpclose">Close</button></div></div>
+</div>
+
+<div id="medal" hidden><div class="mcard"><div class="coin">🏅</div><div class="mlbl"></div></div></div>
+<div id="fade"></div>
+
+<div id="bigmap" hidden>
+  <div class="sheet">
+    <canvas id="bigmapc" width="600" height="600" aria-label="map"></canvas>
+    <div id="bigchips"></div>
+    <button id="bigclose" aria-label="close map">×</button>
+  </div>
+</div>
+
+<div id="start">
+  <div>
+    <h1>Emma Grace's Adventures 2</h1>
+    <p>Wander, gather, and wake up the sleeping places. Fluffy is coming too.</p>
+    <button id="go">Play</button>
+    <div class="hintline">Best in landscape · drag to look · stick to walk</div>
+  </div>
+</div>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
