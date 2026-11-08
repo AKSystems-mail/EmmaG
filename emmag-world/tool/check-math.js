@@ -3,7 +3,7 @@ import { makeProblem } from '../src/math.js';
 
 const bag = { res: 'stone', have: 3, need: 4 };
 
-for (let lv = 0; lv <= 4; lv++) {
+for (let lv = 0; lv <= 5; lv++) {
   for (let i = 0; i < 4000; i++) {
     const p = makeProblem(lv, i % 3 === 0 ? bag : {});
     assert.equal(p.choices.length, 4, 'four choices');
@@ -19,6 +19,13 @@ for (let lv = 0; lv <= 4; lv++) {
     }
     if (p.kind === 'skip') assert.equal(p.answer, n[2] + (n[1] - n[0]), p.q);
     if (p.kind === 'place') assert.equal(p.answer, Math.floor(n[0] / 10), p.q);
+    if (p.kind === 'mul') assert.equal(p.answer, n[0] * n[1], p.q);
+    if (p.kind === 'big') assert.equal(p.answer, n[0] + n[1], p.q);
+    if (p.kind === 'bigsub') assert.equal(p.answer, n[0] - n[1], p.q);
+    if (p.kind === 'round') {
+      const unit = /nearest 10\b/.test(p.q) ? 10 : 100;
+      assert.equal(p.answer, Math.round(n[0] / unit) * unit, p.q);
+    }
   }
 }
 
@@ -27,4 +34,4 @@ for (let i = 0; i < 3000; i++) {
   const p = makeProblem(0, {});
   assert.ok(['add20', 'sub20'].includes(p.kind), `level 0 gave ${p.kind}`);
 }
-console.log('math: 23k problems OK across 5 levels');
+console.log('math: 28k problems OK across 6 levels');

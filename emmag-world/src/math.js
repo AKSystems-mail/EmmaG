@@ -1,5 +1,6 @@
 // 2nd-grade problems: add/sub within 20 and 100, skip counting, place value.
-// Questions ramp by `level` (0..4) and, when the game passes its inventory,
+// Level 5 is the 3rd-grade tier: times tables, three-digit add/sub, rounding.
+// Questions ramp by `level` (0..5) and, when the game passes its inventory,
 // some are word problems about what Emma is actually carrying.
 
 const ri = (a, b, rnd) => a + Math.floor(rnd() * (b - a + 1));
@@ -11,12 +12,13 @@ const PLAN = [
   ['add20', 'sub20', 'skip', 'add100'],
   ['add20', 'sub20', 'skip', 'add100', 'sub100'],
   ['add20', 'sub20', 'skip', 'add100', 'sub100', 'place'],
+  ['mul', 'mul', 'big', 'bigsub', 'round'],
 ];
 
 const NAMES = { wood: 'twigs', stone: 'stones', bloom: 'flowers', spark: 'sparkles' };
 
 export function makeProblem(level = 0, ctx = {}, rand = Math.random) {
-  const lv = Math.max(0, Math.min(4, level | 0));
+  const lv = Math.max(0, Math.min(PLAN.length - 1, level | 0));
   const kinds = PLAN[lv];
   let kind = pick(kinds, rand);
   let q, answer, hint;
@@ -37,6 +39,25 @@ export function makeProblem(level = 0, ctx = {}, rand = Math.random) {
     const a = ri(41, 99, rand), b = ri(11, 39, rand);
     q = `${a} − ${b} = ?`; answer = a - b;
     hint = `Take away the tens first, then the ones.`;
+  } else if (kind === 'mul') {
+    const a = ri(2, 9, rand), b = ri(2, 10, rand);
+    q = `${a} × ${b} = ?`; answer = a * b;
+    hint = `Think of ${b} rows of ${a}. Count up by ${a}s.`;
+  } else if (kind === 'big') {
+    const a = ri(150, 640, rand), b = ri(105, 299, rand);
+    q = `${a} + ${b} = ?`; answer = a + b;
+    hint = `Add the hundreds, then the tens, then the ones.`;
+  } else if (kind === 'bigsub') {
+    const a = ri(320, 980, rand), b = ri(115, 289, rand);
+    q = `${a} − ${b} = ?`; answer = a - b;
+    hint = `Take away the hundreds first, then the tens, then the ones.`;
+  } else if (kind === 'round') {
+    const n = ri(112, 989, rand), tens = rand() < 0.5;
+    const unit = tens ? 10 : 100;
+    q = `What is ${n} rounded to the nearest ${tens ? 10 : '100'}?`;
+    answer = Math.round(n / unit) * unit;
+    hint = tens ? `Look at the ones digit: 1–4 rounds down, 5–9 rounds up.`
+      : `Look at the tens digit: 1–4 rounds down, 5–9 rounds up.`;
   } else if (kind === 'skip') {
     const step = pick([2, 5, 10], rand), start = step * ri(1, 4, rand);
     q = `${start}, ${start + step}, ${start + step * 2}, ?`;
@@ -66,8 +87,17 @@ export function makeProblem(level = 0, ctx = {}, rand = Math.random) {
     }
   }
 
+  // rounding is a four-way choice a kid can reason about, not a number soup
   const choices = new Set([answer]);
-  const spread = kind === 'place' ? 4 : Math.max(4, Math.round(Math.abs(answer) * 0.4));
+  if (kind === 'round') {
+    const unit = /nearest 10\b/.test(q) ? 10 : 100;
+    [answer - unit, answer + unit, Math.round((answer + ri(1, 40, rand)) / unit) * unit].forEach((c) => c >= 0 && choices.add(c));
+    while (choices.size < 4) choices.add(answer + unit * choices.size);
+  }
+  const spread = kind === 'place' ? 4
+    : kind === 'round' ? 10
+    : kind === 'big' || kind === 'bigsub' ? 30
+    : Math.max(4, Math.round(Math.abs(answer) * 0.4));
   let guard = 0;
   while (choices.size < 4 && guard++ < 80) {
     const off = ri(1, Math.max(3, spread), rand) * (rand() < 0.5 ? -1 : 1);

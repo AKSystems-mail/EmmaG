@@ -11,7 +11,9 @@
 <link rel="apple-touch-icon" href="/icon-192.png" />
 <style>
   :root { --cream:#fdf6ec; --lilac:#b79ce8; --ink:#1b1030; }
-  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent;
+    -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+  #nbin, #booklist .entry { -webkit-user-select:text; user-select:text; }
   html,body { margin:0; height:100%; overflow:hidden; background:#101c2e;
     font-family: ui-rounded, "Nunito", system-ui, -apple-system, sans-serif; color:var(--cream); }
   #c { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
@@ -27,16 +29,19 @@
   .dot.wood{background:#6fbf5a} .dot.stone{background:#9aa0aa} .dot.bloom{background:#f2a0c8}
   .dot.spark{background:#b18ce8} .dot.star{background:#ffd75e;border-radius:50%}
 
-  #mute { position:fixed; top:calc(10px + env(safe-area-inset-top)); right:calc(14px + env(safe-area-inset-right));
-    width:42px; height:42px; border-radius:14px; border:0; background:rgba(20,16,40,.42); color:var(--cream);
-    font-size:17px; backdrop-filter:blur(6px); }
+  #topbtns { position:fixed; top:calc(10px + env(safe-area-inset-top)); right:calc(14px + env(safe-area-inset-right));
+    display:flex; align-items:center; gap:10px; z-index:6; }
+  #mute { width:42px; height:42px; padding:0; font-size:17px; }
 
   #prompt { position:fixed; left:50%; bottom:calc(96px + env(safe-area-inset-bottom)); transform:translateX(-50%);
-    padding:10px 18px; border-radius:999px; background:rgba(20,16,40,.62); backdrop-filter:blur(8px);
-    font-size:15px; font-weight:700; white-space:nowrap; }
+    padding:8px 16px; border-radius:12px; border:2px solid #2a1a4a; background:linear-gradient(180deg,#fffdf7,#f3e5d0);
+    color:#2a1a4a; font-size:14px; font-weight:800; letter-spacing:.03em; white-space:nowrap;
+    box-shadow:0 3px 0 #2a1a4a, 0 8px 18px rgba(6,9,22,.32); z-index:6;
+    cursor:pointer; -webkit-user-select:none; user-select:none; touch-action:manipulation; }
+  #prompt:active { transform:translateX(-50%) translateY(3px); box-shadow:0 0 0 #2a1a4a; }
 
   #act { position:fixed; right:calc(22px + env(safe-area-inset-right)); bottom:calc(26px + env(safe-area-inset-bottom));
-    width:96px; height:96px; border-radius:50%; border:0; color:#2a1a4a; font-weight:900; font-size:15px;
+    width:96px; height:96px; border-radius:50%; border:0; color:#2a1a4a; font-weight:900; font-size:15px; z-index:6;
     letter-spacing:.04em; background:linear-gradient(160deg,#f7d6ff,#b79ce8);
     box-shadow:0 10px 26px rgba(0,0,0,.35), inset 0 -3px 0 rgba(0,0,0,.12); }
 
@@ -66,10 +71,16 @@
   #fb { min-height:22px; margin-top:14px; font-size:14px; font-weight:700; color:#ffd9a0; opacity:.9; }
   #skip { margin-top:6px; font-size:13px; opacity:.5; }
 
-  #start { position:fixed; inset:0; display:grid; place-items:center; text-align:center;
-    background:radial-gradient(circle at 50% 40%, #2b2350, #0d1220 70%); }
-  #start h1 { font-size:clamp(28px,7vw,54px); margin:0 0 6px; letter-spacing:.03em; }
-  #start p { margin:0 0 26px; opacity:.72; font-size:15px; max-width:30ch; line-height:1.5; }
+  /* the title card sits in front of the game, not among it: z-index puts the
+     HUD and the top buttons behind the blur instead of on top of Play */
+  #start { position:fixed; inset:0; display:grid; place-items:center; text-align:center; z-index:70;
+    background:radial-gradient(circle at 50% 44%, rgba(43,35,80,.32), rgba(10,14,26,.84) 72%);
+    backdrop-filter:blur(6px); }
+  #start h1 { font-size:clamp(28px,7vw,54px); margin:0 0 10px; letter-spacing:.03em;
+    text-shadow:0 6px 34px rgba(183,156,232,.55), 0 2px 6px rgba(6,9,22,.5); }
+  #start h1::after { content:''; display:block; width:74px; height:3px; margin:14px auto 0; border-radius:2px;
+    background:linear-gradient(90deg, transparent, #f2a0c8, transparent); }
+  #start p { margin:0 0 26px; opacity:.75; font-size:15px; max-width:30ch; line-height:1.5; text-shadow:0 2px 10px rgba(6,9,22,.6); }
   #go { padding:18px 54px; border-radius:18px; border:0; font-size:18px; font-weight:900; letter-spacing:.14em;
     text-transform:uppercase; color:#2a1a4a; background:linear-gradient(150deg,#f7d6ff,#b79ce8);
     box-shadow:0 14px 40px rgba(183,156,232,.35); }
@@ -77,12 +88,7 @@
 
 #obj { font-size:12px; letter-spacing:.02em; opacity:.75; margin-top:4px; max-width:230px; pointer-events:auto; cursor:pointer; }
 #obj b { color:#f2a0c8; font-weight:600; }
-#book, #camp {
-  position:fixed; top:calc(10px + env(safe-area-inset-top)); right:calc(58px + env(safe-area-inset-right));
-  padding:8px 12px; border-radius:12px; border:1px solid rgba(255,255,255,.16);
-  background:rgba(14,18,38,.42); color:#eef; font:600 12px system-ui; backdrop-filter:blur(5px);
-}
-#camp { right:calc(112px + env(safe-area-inset-right)); }
+#book, #camp { padding:7px 13px; font:800 12px system-ui; }
 #vig { position:fixed; inset:0; pointer-events:none; background:radial-gradient(ellipse at 50% 55%, rgba(0,0,0,0) 50%, rgba(4,8,20,.42) 100%); }
 #map {
   position:fixed; top:calc(52px + env(safe-area-inset-top)); right:calc(10px + env(safe-area-inset-right));
@@ -116,7 +122,7 @@
 #bigmap { position:fixed; inset:0; display:grid; place-items:center; background:rgba(8,7,18,.30); backdrop-filter:blur(2px); z-index:35; }
 #bigmap[hidden] { display:none; }
 #bigmap .sheet { display:grid; gap:10px; justify-items:center; position:relative; }
-#bigmapc { width:min(78vw,70vh); height:min(78vw,70vh); border-radius:50%;
+#bigmapc { touch-action:none; width:min(78vw,70vh); height:min(78vw,70vh); border-radius:50%;
   background:radial-gradient(circle at 50% 45%, rgba(20,28,54,.62), rgba(8,12,26,.62));
   border:1px solid rgba(255,255,255,.22); box-shadow:0 20px 60px rgba(0,0,0,.45); }
 #bigchips { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; max-width:min(78vw,70vh); }
@@ -131,11 +137,11 @@
 #mini .track i { position:absolute; top:-6px; width:6px; height:22px; border-radius:3px; background:#ffd75e; margin-left:-3px; box-shadow:0 0 10px #ffd75e; }
 #mini span { font-size:11px; opacity:.72; }
 #act.bite { background:linear-gradient(160deg,#ffe9a0,#ffb15e); }
-#photo { position:fixed; right:calc(22px + env(safe-area-inset-right)); top:calc(120px + env(safe-area-inset-top));
+#photo { position:fixed; right:calc(22px + env(safe-area-inset-right)); top:calc(164px + env(safe-area-inset-top));
   width:38px; height:38px; border-radius:12px; border:1px solid rgba(255,255,255,.16); background:rgba(14,18,38,.42); color:#eef; font-size:15px; backdrop-filter:blur(5px); }
 #shot { position:fixed; left:50%; bottom:calc(24px + env(safe-area-inset-bottom)); transform:translateX(-50%); display:none;
   padding:12px 22px; border-radius:14px; border:0; font:800 13px system-ui; letter-spacing:.1em; color:#2a1a4a; background:linear-gradient(150deg,#f7d6ff,#b79ce8); }
-body.photo #hud, body.photo #map, body.photo #book, body.photo #camp, body.photo #mute, body.photo #prompt,
+body.photo #hud, body.photo #map, body.photo #topbtns, body.photo #prompt,
 body.photo #act, body.photo #photo, body.photo #toast, body.photo #vig { display:none !important; }
 body.photo #shot { display:block; }
 #namebox, #paint, #tp, #sleep { position:fixed; inset:0; display:grid; place-items:center; background:rgba(6,9,22,.6); backdrop-filter:blur(6px); z-index:40; }
@@ -153,6 +159,51 @@ body.photo #shot { display:block; }
 #booklist .slot { padding:9px 10px; border-radius:10px; font-size:12px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.09); }
 #booklist .slot.got { background:rgba(242,160,200,.12); border-color:rgba(242,160,200,.4); color:#ffd9ec; }
 #booklist .slot.empty { opacity:.35; }
+
+/* ---- one button system: cream sticker, ink outline, hard lip that
+   presses down.  Last in the sheet on purpose, so it beats the
+   per-button radii and gradients above instead of duplicating them. ---- */
+#go, #install, #mute, #book, #camp, #photo, #shot, #act, #bigclose,
+.row button, #bookclose, #pdone, #tpclose, #tplist button, .choices button {
+  font-family:inherit; font-weight:800; letter-spacing:.05em; color:#2a1a4a;
+  border:2px solid #2a1a4a; border-radius:10px;
+  background:linear-gradient(180deg,#fffdf7,#f3e5d0);
+  box-shadow:0 4px 0 #2a1a4a, 0 9px 18px rgba(6,9,22,.34);
+  transition:transform .07s ease, box-shadow .07s ease;
+  -webkit-user-select:none; user-select:none; touch-action:manipulation;
+}
+#go:active, #mute:active, #book:active, #camp:active, #photo:active, #shot:active,
+#act:active, #bigclose:active, .row button:active, #bookclose:active,
+#pdone:active, #tpclose:active, #tplist button:active, .choices button:active {
+  transform:translateY(4px); box-shadow:0 0 0 #2a1a4a, 0 2px 6px rgba(6,9,22,.3);
+}
+/* the three things you press to move the story: lilac, not cream */
+#go, #shot, #act { background:linear-gradient(180deg,#ffe3fb,#b79ce8); }
+#act { border-radius:50%; font-size:14px; text-transform:uppercase; }
+#bigclose { border-radius:50%; }
+#go { border-radius:14px; text-transform:uppercase; letter-spacing:.14em; }
+#install { display:block; margin:14px auto 0; padding:11px 24px; font-size:12px; text-transform:uppercase; }
+#install[hidden] { display:none; }
+/* book tabs are tags; the map objectives are real buttons, same sticker system */
+#booktabs button {
+  border-radius:999px; border-color:rgba(183,156,232,.7); color:#efe6ff;
+  background:rgba(20,16,40,.5); box-shadow:none; font-size:11px;
+}
+#booktabs button:active { transform:translateY(2px); box-shadow:none; }
+#booktabs button.on { color:#2a1a4a; background:#dcc8ff; border-color:#2a1a4a; }
+#bigchips button {
+  font:800 11px system-ui; letter-spacing:.04em; color:#2a1a4a;
+  padding:7px 14px; border-radius:10px; border:2px solid #2a1a4a;
+  background:linear-gradient(180deg,#fffdf7,#f3e5d0);
+  box-shadow:0 3px 0 #2a1a4a, 0 6px 14px rgba(6,9,22,.3);
+  transition:transform .07s ease, box-shadow .07s ease;
+}
+#bigchips button:active { transform:translateY(3px); box-shadow:0 0 0 #2a1a4a; }
+#bigchips button.on {
+  color:#2a1a4a; border-color:#2a1a4a;
+  background:linear-gradient(180deg,#ffe3fb,#b79ce8);
+}
+
 </style>
 </head>
 <body>
@@ -163,9 +214,11 @@ body.photo #shot { display:block; }
   <div id="obj">Looking around…</div>
   <div id="res"></div>
 </div>
-<button id="mute" aria-label="sound">♪</button>
-<button id="book" aria-label="collection">Book</button>
-<button id="camp" aria-label="make camp">Camp</button>
+<div id="topbtns">
+  <button id="mute" aria-label="sound">♪</button>
+  <button id="book" aria-label="collection">Book</button>
+  <button id="camp" aria-label="make camp">Camp</button>
+</div>
 <canvas id="map" width="132" height="132" aria-label="map"></canvas>
 <button id="photo" aria-label="photo mode">📷</button>
 <button id="shot">Save postcard</button>
@@ -242,7 +295,11 @@ body.photo #shot { display:block; }
     <h1>Emma Grace's Adventures 2</h1>
     <p>Wander, gather, and wake up the sleeping places. Fluffy is coming too.</p>
     <button id="go">Play</button>
+    <button id="install" hidden>Install app</button>
     <div class="hintline">Best in landscape · drag to look · stick to walk</div>
+    <div class="hintline" style="margin-top:10px;opacity:.5;font-size:11px">
+      Trees, rocks, dock, path, grass &amp; flowers by Quaternius (CC0) · Rock flat by Kenney (CC0) · Cave scene by Brandon Jones (Toji) · Vines by Poly by Google (CC-BY) · Twine by Jakob Hippe
+    </div>
   </div>
 </div>
 
