@@ -27,7 +27,7 @@ const isGone = (n, now = performance.now()) => {
 // ---------------------------------------------------------------- state
 const store = JSON.parse(localStorage.getItem(SAVE) || '{}');
 const save = Object.assign(
-  { seed: (Math.random() * 1e9) | 0, x: R / 2, z: R / 2, gates: [], restored: [], res: { wood: 0, stone: 0, bloom: 0, spark: 0 }, stickers: 0 },
+  { seed: (Math.random() * 1e9) | 0, x: R / 2, z: R / 2, gates: [], restored: [], res: { wood: 0, stone: 0, bloom: 0, spark: 0 } },
   store,
 );
 if (save.x === 0 && save.z === 0) { save.x = R / 2; save.z = R / 2; }
@@ -352,7 +352,18 @@ function shadowBlob(size) {
 const geo = {
   flower: new THREE.OctahedronGeometry(0.19, 0).translate(0, 0.3, 0),
   crystal: new THREE.OctahedronGeometry(0.44, 0).scale(1, 1.9, 1).translate(0, 0.7, 0),
-  bush: new THREE.IcosahedronGeometry(0.72, 0).translate(0, 0.52, 0),
+  // a clump, not a ball: vertices knocked off the sphere by their own position,
+  // so shared corners move together and no cracks open between faces
+  bush: (() => {
+    const g = new THREE.IcosahedronGeometry(0.72, 1), p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      const k = 1 + 0.3 * Math.sin(x * 12.9 + y * 7.3 + z * 4.7);
+      p.setXYZ(i, x * k, Math.max(0, y) * (0.8 + 0.4 * Math.abs(Math.sin(x * 9.1 + z * 6.3))), z * k);
+    }
+    g.computeVertexNormals();
+    return g.translate(0, 0.5, 0);
+  })(),
   tuft: new THREE.ConeGeometry(0.09, 0.42, 3).translate(0, 0.21, 0),
   mush: new THREE.ConeGeometry(0.15, 0.2, 7).translate(0, 0.26, 0),
 };
@@ -1073,8 +1084,7 @@ function toast(msg) {
   toastT = setTimeout(() => toastEl.classList.remove('on'), 2600);
 }
 function hud() {
-  resEl.innerHTML = TYPES.map((k) => `<span><i class="dot ${k}"></i>${save.res[k]}<small>${LABEL[k]}</small></span>`).join('') +
-    (save.stickers ? `<span><i class="dot star"></i>${save.stickers}<small>Star</small></span>` : '');
+  resEl.innerHTML = TYPES.map((k) => `<span><i class="dot ${k}"></i>${save.res[k]}<small>${LABEL[k]}</small></span>`).join('');
 }
 hud();
 
@@ -1161,8 +1171,10 @@ function restore(lm) {
   lm.done = true;
   if (lm.req) { const [r, n] = lm.req; save.res[r] = Math.max(0, save.res[r] - n); }
   save.restored.push(lm.key);
-  save.stickers++;
-  if (save.restored.length >= 8) for (const c of camps) if (c.balloon) c.balloon.visible = true;
+  if (save.restored.length === 8) {
+    for (const c of camps) if (c.balloon) c.balloon.visible = true;
+    setTimeout(() => toast('A balloon waits at every camp now 🎈'), 2700);   // after the wake toast
+  }
   persist();
   lm.stone.material.color.set(0x9fe6b8);
   lm.stone.material.emissive.set(0x2f7a4a);
@@ -1905,6 +1917,16 @@ function youMarker(ctx, C, big) {
   ctx.stroke(); ctx.fill();
 }
 
+// a chevron pinned to the rim, pointing at something too far away to draw
+function rimArrow(ctx, C, dx, dz, fill) {
+  const a = Math.atan2(dz - C, dx - C), r = C - 10;
+  ctx.save(); ctx.translate(C + Math.cos(a) * r, C + Math.sin(a) * r); ctx.rotate(a);
+  ctx.beginPath(); ctx.moveTo(9, 0); ctx.lineTo(-5, 6); ctx.lineTo(-5, -6); ctx.closePath();
+  ctx.fillStyle = fill; ctx.fill();
+  ctx.strokeStyle = 'rgba(30,22,50,.85)'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.restore();
+}
+
 // one painter, two sizes: the minimap and the big map are the same drawing
 function paintMap(ctx, S, RANGE, big = false) {
   if (inCave && caveRoom) return paintCave(ctx, S, big);
@@ -1946,7 +1968,22 @@ function paintMap(ctx, S, RANGE, big = false) {
     }
   }
   for (const f of friends.values()) dot(f.g.position.x, f.g.position.z, '#ffd76e', big ? 5 : 3);
-  for (const c of camps) dot(c.g.position.x, c.g.position.z, '#ffa860', big ? 5 : 3);
+  for (const c of camps) {
+    const [dx, dz] = at(c.x, c.z);
+    if (Math.hypot(dx - C, dz - C) > C - 8) { if (big) rimArrow(ctx, C, dx, dz, '#ffa860'); continue; }
+    dot(c.x, c.z, '#ffa860', big ? 5 : 3, 'rgba(255,222,180,.85)');
+    if (big) {
+      const nm = campName(c);
+      ctx.font = '700 19px ui-rounded, system-ui, sans-serif';
+      const w = ctx.measureText(nm).width;
+      if (labels.some((l) => Math.abs(l[0] - dx) < (w + l[2]) * 0.5 + 4 && Math.abs(l[1] - dz) < 22)) continue;
+      labels.push([dx, dz, w]);
+      ctx.textAlign = 'center';
+      ctx.strokeStyle = 'rgba(20,14,36,.9)'; ctx.lineWidth = 3;
+      ctx.strokeText(nm, dx, dz - 10);
+      ctx.fillStyle = '#ffd9b0'; ctx.fillText(nm, dx, dz - 10);
+    }
+  }
 
   // the chosen objective, wherever it is
   const o = objList.find((q) => q.id === objId);
@@ -1955,13 +1992,7 @@ function paintMap(ctx, S, RANGE, big = false) {
     const off = Math.hypot(dx - C, dz - C) > C - 8;
     if (off) {
       // off the map: a chevron on the rim pointing at it
-      const a = Math.atan2(dz - C, dx - C), r = C - 10;
-      const ex = C + Math.cos(a) * r, ey = C + Math.sin(a) * r;
-      ctx.save(); ctx.translate(ex, ey); ctx.rotate(a);
-      ctx.beginPath(); ctx.moveTo(9, 0); ctx.lineTo(-5, 6); ctx.lineTo(-5, -6); ctx.closePath();
-      ctx.fillStyle = '#ff9ed2'; ctx.fill();
-      ctx.strokeStyle = 'rgba(30,22,50,.85)'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.restore();
+      rimArrow(ctx, C, dx, dz, '#ff9ed2');
     } else {
       ctx.save(); ctx.translate(dx, dz); ctx.rotate(Math.PI / 4);
       const r = big ? 9 : 6;
@@ -2351,7 +2382,6 @@ function tryQuest(name) {
   if (save.res[res] < need) { toast(`${name} wants ${need} ${LABEL[res]}${need > 1 ? 's' : ''}.`); return true; }
   save.res[res] -= need;
   save.quests[name] = true;
-  save.stickers++;
   hud(); persist(); checkBadges();
   logJournal(`${name} gave me ${gift} for ${need} ${LABEL[res]}s.`);
   toast(`${name} gives you ${gift} ✨`);
@@ -2596,7 +2626,7 @@ function answer(v, btn) {
           giant.awake = true; save.giant = true; persist();
           giant.lid = 0.06; giant.bT = 1.6;   // eyes open, first slow blink soon
           for (const mm of giant.stone) mm.color.set(GIANT_GREEN);   // one skin, all of him
-          save.stickers++; hud(); checkBadges();
+          hud(); checkBadges();
           logJournal('I woke the giant. He was very tired.');
           burst(new THREE.Vector3(giant.x, 5, giant.z), 0x9fe6b8, 60, 9);
           toast('The giant wakes. The ground remembers it 🌿');
@@ -2643,7 +2673,6 @@ function interact() {
     if (!f.met) {
       f.met = true;
       save.friends.push(f.name);
-      save.stickers++;
       persist(); hud();
     }
   } else if (near.kind === 'pet') {
@@ -2907,7 +2936,6 @@ function updateSky() {
   cloudMat.opacity = 0.3 + day * 0.45;
   skyMoon = moonAlt;
   skyAz = (Math.PI / 2) * (1 - 2 * u);              // E at sunrise, S at noon, W at sunset
-  stars.position.copy(player.position);
   stars.rotation.y = a * 0.3;
   // hand the water the same sky it is under, plus the disc that is actually up
   waterU.top.value.copy(skyTop);
@@ -4031,7 +4059,6 @@ function leaveCave() {
 function caveTakeTreasure() {
   if (save.treasure.includes(caveKey)) return;
   save.treasure.push(caveKey);
-  save.stickers++;
   caveRoom.chest.visible = false;
   caveRoom.shine.visible = false;
   persist(); hud();
@@ -5476,6 +5503,7 @@ function tick() {
     b.children[1].rotation.z = -flap;
   }
   skyDome.position.copy(camera.position);
+  stars.position.copy(camera.position);   // every frame: on the 5s sky tick it snapped forward
   if (inCave && caveRoom) caveTick(dt, t);
   rippleTick(dt);   // cave rings and pond rings expire even when nothing is fishing
 
