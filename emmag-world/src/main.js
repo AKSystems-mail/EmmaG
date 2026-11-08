@@ -86,6 +86,7 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.04;
+window.__r = renderer;   // TEMP shadow debug
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.1, 500);
@@ -364,7 +365,8 @@ const geo = {
     g.computeVertexNormals();
     return g.translate(0, 0.5, 0);
   })(),
-  tuft: new THREE.ConeGeometry(0.09, 0.42, 3).translate(0, 0.21, 0),
+
+
   mush: new THREE.ConeGeometry(0.15, 0.2, 7).translate(0, 0.26, 0),
 };
 
@@ -381,7 +383,7 @@ const pools = {
   flower: pool(geo.flower, mat({ color: 0xf2a0c8 }), 700),
   crystal: pool(geo.crystal, mat({ color: 0xa06be0, emissive: 0x3a1b6b, emissiveIntensity: 1 }), 200),
   bush: pool(geo.bush, mat({ color: 0x3f8a3c }), 400),
-  tuft: (() => { const m = pool(geo.tuft, windify(mat({ color: 0x5aa04a }), '0.10'), 1400); m.castShadow = false; return m; })(),
+  // tuft: built from grass.glb once it lands -- a cone here read as a green spike
   mush: pool(geo.mush, mat({ color: 0xe06a7a }), 90),
 };
 
@@ -401,6 +403,10 @@ new GLTFLoader().load('/models/grass.glb', (g) => {
   mG.side = THREE.DoubleSide;
   pools.grass = pool(geoG, mG, 320);
   pools.grass.castShadow = false;
+  // same clump doubles as the scattered tuft cover, smaller and windier
+  const mt = windify(mat({ color: 0x6fae55 }), '0.12');
+  pools.tuft = pool(geoG, mt, 1200);
+  pools.tuft.castShadow = false;
   rebuild();
 }, undefined, () => {});
 
@@ -561,6 +567,21 @@ function paveTrails(px, pz) {
   pools[key] = pool(g, m, 160);
   if (key === 'rockC') for (const c of caves.values()) if (c.g) addCaveRocks(c.g);
 }));
+// bushes: Quaternius shrubs, two kinds, picked per prop by tone
+loadPack('/models/bush_a.glb', (gl) => {
+  const ps = fitAll(partsOf(gl), 1.1);          // a shrub, not a tree
+  // the pack ships one flat dark green and 0.4 metal -- too dull for this light,
+  // so the colour comes from the instance tint instead
+  const m = new THREE.MeshStandardMaterial({ flatShading: true, roughness: 1, metalness: 0, side: THREE.FrontSide });
+  pools.bush0 = pool(ps[0].geo, m, 200);
+});
+// two primitives (leaves + berries), so colours bake per vertex and the
+// berries survive the instance tint as red
+loadPack('/models/bush_b.glb', (gl) => {
+  const ps = fitAll(partsOf(gl), 1.1);
+  for (const p of ps) p.mat = new THREE.MeshStandardMaterial({ color: /berry/i.test(p.mat.name || '') ? 0xa8323a : 0x55843f });
+  pools.bush1 = pool(bake(ps), packMat(), 200);
+});
 loadPack('/models/tallgrass.glb', (gl) => {
   const ps = fitAll(partsOf(gl), 1.6), m = ps[0].mat.clone();
   m.flatShading = true; m.side = THREE.DoubleSide;
@@ -588,7 +609,28 @@ loadPack('/models/path_tile.glb', (gl) => {
 // the pier: one geometry, cloned per pond, laid along +z
 const dockWait = [];
 let dockGeo = null;
-let dockDrop = 0;                  // bbox top -> deck, so the boards sit on the bank
+let DOCK_Y = 0.9;                  // deck top: re-read off the boards once the model lands
+let dockDrop = 0;
+// the post caps stand proud of the planks, so bbox.max.y is not the deck. The
+// deck is the biggest flat up-facing surface in the model -- her feet go there.
+const deckY = (g) => {
+  const pos = g.attributes.position, idx = g.index;
+  const n = idx ? idx.count : pos.count, gi = (i) => (idx ? idx.getX(i) : i);
+  const area = new Map();
+  for (let i = 0; i < n; i += 3) {
+    const a = gi(i), b = gi(i + 1), c = gi(i + 2);
+    const ux = pos.getX(b) - pos.getX(a), uy = pos.getY(b) - pos.getY(a), uz = pos.getZ(b) - pos.getZ(a);
+    const wx = pos.getX(c) - pos.getX(a), wy = pos.getY(c) - pos.getY(a), wz = pos.getZ(c) - pos.getZ(a);
+    const nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+    const L = Math.hypot(nx, ny, nz) || 1;
+    if (ny / L < 0.85) continue;                    // up-facing only
+    const y = +pos.getY(a).toFixed(2);
+    area.set(y, (area.get(y) || 0) + L / 2);
+  }
+  let top = 0, best = -1;
+  for (const [y, a] of area) if (a > best) { best = a; top = y; }
+  return top;
+};
 const dockPiece = (z) => {
   const m = new THREE.Mesh(dockGeo, packMat());
   m.position.set(0, dockDrop, z);
@@ -604,7 +646,9 @@ loadPack('/models/dock.glb', (gl) => {
   if (s.x > s.z) g.rotateY(Math.PI / 2);
   dockGeo = fitAll([{ geo: g }], 0)[0].geo;
   dockGeo.computeBoundingBox();
-  dockDrop = 0.45 - dockGeo.boundingBox.max.y;   // boards 38 cm over the water: low, but still a pier
+  const deck = deckY(dockGeo);
+  dockDrop = 0.9 - dockGeo.boundingBox.max.y;      // caps clear the water at 0.9, posts buried
+  DOCK_Y = deck + dockDrop;                        // feet on the planks, not on the caps
   for (const w of dockWait) w.g.add(dockPiece(w.z));
   dockWait.length = 0;
 });
@@ -679,7 +723,7 @@ function genChunk(cx, cz) {
   add('flower', 4 + Math.floor(rnd() * 5), 0.8, 1.3);
   if (rnd() < 0.55) add('crystal', 1, 0.8, 1.25);
   if (rnd() < 0.7) add('bush', 1, 0.8, 1.3);
-  add('tuft', 18 + Math.floor(rnd() * 14), 0.7, 1.5);
+  add('tuft', 10 + Math.floor(rnd() * 8), 0.5, 1.0);
   // an open-field grass patch: 3-6 big clumps in a 5 m clump, so it reads as
   // a patch rather than more scatter
   if (rnd() < 0.42) {
@@ -731,8 +775,10 @@ function rebuild() {
         col.setHSL(0.76, 0.5, 0.58);
         put('crystal', p.s, p.s, p.s);
       } else if (p.type === 'bush') {
-        col.setHSL(0.3, 0.4, 0.2 + p.tone * 0.08);
-        put('bush', p.s, p.s, p.s);
+        const berry = p.tone >= 0.5 && pools.bush1;
+        col.setHSL(0.29 + p.tone * 0.04, 0.44, 0.24 + p.tone * 0.12);
+        if (berry) col.setScalar(0.95 + p.tone * 0.1);   // colours are baked, don't tint the berries green
+        put(berry ? 'bush1' : pools.bush0 ? 'bush0' : 'bush', p.s, p.s, p.s);
       } else if (p.type === 'grass') {
         col.setHSL(0.26 + p.tone * 0.04, 0.4, 0.46 + p.tone * 0.1);
         put('grass', p.s * 1.5, p.s * 1.5 * (0.9 + p.tone * 0.3), p.s * 1.5);
@@ -743,7 +789,7 @@ function rebuild() {
     }
   }
   // only the chunk-prop pools: reeds, blooms and path tiles are filled elsewhere
-  for (const k of ['tree0', 'tree1', 'tree2', 'rockFlat', 'rockB', 'rockC', 'flower', 'crystal', 'bush', 'tuft', 'mush', 'grass']) {
+  for (const k of ['tree0', 'tree1', 'tree2', 'rockFlat', 'rockB', 'rockC', 'flower', 'crystal', 'bush', 'bush0', 'bush1', 'tuft', 'mush', 'grass']) {
     if (!pools[k]) continue;
     pools[k].count = n[k] || 0;
     pools[k].instanceMatrix.needsUpdate = true;
@@ -850,7 +896,7 @@ outline(player, 1.055, new THREE.MeshBasicMaterial({ color: 0xff80ff, side: THRE
 new GLTFLoader().load('/models/emma.glb', (g) => {
   const root = g.scene;
   root.rotation.y = Math.PI;                       // Blender +Y faces -Z in glTF; the game walks +Z
-  root.traverse((m) => { if (m.isMesh) m.material = toon({ color: m.material.color.getHex() }); });
+  root.traverse((m) => { if (m.isMesh) { m.material = toon({ color: m.material.color.getHex() }); m.castShadow = true; } });
   const armL = root.getObjectByName('armL'), armR = root.getObjectByName('armR');
   const legL = root.getObjectByName('legL'), legR = root.getObjectByName('legR');
   if (!armL || !armR || !legL || !legR) return;     // bad asset -> quietly stay on the primitives
@@ -1704,7 +1750,7 @@ function groundAt(x, z) {
   for (const pd of ponds.values()) {
     const deck = onBridge(pd, x, z);
     if (deck) { y = deck; break; }
-    if (onDock(x, z)) { y = 0.45; break; }
+    if (onDock(x, z)) { y = DOCK_Y; break; }
     if (onStones(x, z)) { y = 0.3; break; }
   }
   return Math.max(y, hillAt(x, z));
@@ -1861,6 +1907,28 @@ function pushOut(x, z) {
       if (Math.abs(across) < 1.05) continue;
       if (pd.axis) px = pd.x + Math.sign(across) * 1.05;
       else pz = pd.z + Math.sign(across) * 1.05;
+    }
+  }
+  // the pier has rails too: the deck holds her in sideways and stops her at the
+  // water end. Without this, stepping past the end dropped onDock and handed her
+  // to the pond push-out, which fired her back up the boards to the shore
+  {
+    const from = arguments[2] || player.position;
+    for (const pd of ponds.values()) {
+      const d = pd.dock;
+      if (!d) continue;
+      const fx = from.x - d.x, fz = from.z - d.z;
+      if (Math.abs(fx * d.nx + fz * d.nz) >= 1.3) continue;    // not over this deck
+      const fa = fx * d.dx + fz * d.dz;
+      if (fa <= d.a || fa >= d.b) continue;
+      const ax = px - d.x, az = pz - d.z;
+      const along = ax * d.dx + az * d.dz;
+      if (along > d.b) continue;                     // back ashore: free to walk off
+      const across = ax * d.nx + az * d.nz;
+      const A = clamp(along, d.a + 0.2, d.b), C = clamp(across, -1.05, 1.05);
+      if (A === along && C === across) continue;
+      px = d.x + d.dx * A + d.nx * C;
+      pz = d.z + d.dz * A + d.nz * C;
     }
   }
   for (const pd of ponds.values()) {
@@ -3019,15 +3087,18 @@ function pondExtras(pd) {
     g.add(m);
   }
 
-  // dock: a short pier off the side, for fishing
-  const dl = 7.6, dz0 = pd.r * 0.8;
-  // the dock runs at right angles to the bridge: along z when the bridge is along x
-  pd.dock = { x: pd.x, z: pd.z, axis: pd.axis ? 0 : 1, a: dz0, b: dz0 + dl };
+  // dock: a short pier off the side, for fishing.  It runs 45° off the stream so
+  // the planks never lie in running water and the land end always meets grass
+  const [ux, uz] = streamDir(pd), nx = -uz, nz = ux;
+  const dl = 7.6, d0 = pd.r * 0.8;
+  const an = Math.atan2(ux, uz) + Math.PI / 4;
+  const ddx = Math.sin(an), ddz = Math.cos(an);
+  pd.dock = { x: pd.x, z: pd.z, dx: ddx, dz: ddz, nx: -ddz, nz: ddx, a: d0, b: d0 + dl };
   const dockG = new THREE.Group();
-  const slot = { g: dockG, z: dz0 + dl / 2 };
+  dockG.rotation.y = an;                       // local +z -> the dock's own heading
+  const slot = { g: dockG, z: d0 + dl / 2 };
   if (dockGeo) dockG.add(dockPiece(slot.z));
   else dockWait.push(slot);
-  if (pd.dock.axis === 0) dockG.rotation.y = Math.PI / 2;
   g.add(dockG);
 
   // reeds at the waterline, wildflowers a step back on the bank
@@ -3042,7 +3113,6 @@ function pondExtras(pd) {
   Scatter();
 
   // stream: drains the pond away toward the open side, with a waterfall at the end
-  const [ux, uz] = streamDir(pd), nx = -uz, nz = ux;
   // the run stops short of the next pond, so the fall never lands in one
   const b0 = streamB0(pd, ux, uz);
   const a0 = pd.r * 0.7, len = b0 - a0;
@@ -3191,10 +3261,11 @@ function onStones(x, z) {
 }
 function onDock(x, z) {
   for (const pd of ponds.values()) {
-    if (!pd.dock) continue;
-    const dx = x - pd.x, dz = z - pd.z;
-    const along = pd.dock.axis ? dz : dx, across = pd.dock.axis ? dx : dz;
-    if (Math.abs(across) < 1.3 && along > pd.dock.a && along < pd.dock.b) return true;
+    const d = pd.dock;
+    if (!d) continue;
+    const ax = x - d.x, az = z - d.z;
+    const along = ax * d.dx + az * d.dz, across = Math.abs(ax * d.nx + az * d.nz);
+    if (across < 1.3 && along > d.a && along < d.b) return true;
   }
   return false;
 }
@@ -3863,10 +3934,19 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
   shine.visible = !save.treasure.includes(key);
   deep.add(shine);
 
-  // three crystals, in the hall on the way down
+  // three crystals, scattered anywhere on the hall floor
   const crystals = [];
-  [[-13, -14], [0, -21], [13, -14]].forEach(([cx, cz], i) => {
-    const x = cx + (rnd() - 0.5) * 3, z = cz + (rnd() - 0.5) * 3;
+  const crystalSpot = () => {
+    for (let i = 0; i < 40; i++) {
+      const x = (rnd() * 2 - 1) * 21, z = -30 + rnd() * 50;          // clear of the stair, the necks and the door
+      if ((x / 23) ** 2 + (z / 34) ** 2 > 1) continue;                // inside the chamber, not in the wall
+      if (crystals.some((c) => Math.hypot(c.x - x, c.z - z) < 9)) continue;
+      return { x, z };
+    }
+    return { x: 0, z: -18 };                                          // ponytail: 40 darts never missed; keeps the run finite
+  };
+  for (let i = 0; i < 3; i++) {
+    const { x, z } = crystalSpot();
     const cg = new THREE.Group();
     const glow = new THREE.PointLight(0xb18ce8, 1.5, 8, 2);
     glow.position.y = 1;
@@ -3881,7 +3961,7 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
     cg.position.set(x, 0, z);
     g.add(cg);
     crystals.push({ x, z, g: cg, light: glow, got: false });
-  });
+  }
 
   // the way out, open from the start
   const arch = new THREE.Group();
@@ -4108,9 +4188,10 @@ function caveTick(dt, t) {
       sfx.gather(caveFound);
       updateObjective();
       if (caveFound >= 3) {
-        // the wall does not open itself: she walks up to it and answers it
+        // the wall does not open itself: she walks up to it and answers it.
+        // light the door now, not when she blunders into it in the dark
         const d = caveRoom.doors.find((o) => o.kind === 'crystal');
-        if (d) d.quiet = false;
+        if (d) { d.quiet = false; caveBeacon(d); }
         toast('Three lights are lit — the back wall is waiting for an answer');
       }
     }
@@ -5778,7 +5859,7 @@ window.__w = {
   dockDbg: () => {
     const d = dockGeo ? dockGeo.boundingBox : null;
     const pd = [...ponds.values()][0];
-    return { drop: +dockDrop.toFixed(2), dy: d ? [+d.min.y.toFixed(2), +d.max.y.toFixed(2)] : null, dock: pd ? pd.dock : null, pond: pd ? [pd.x, pd.z, pd.r, pd.axis] : null };
+    return { y: +DOCK_Y.toFixed(2), drop: +dockDrop.toFixed(2), dy: d ? [+d.min.y.toFixed(2), +d.max.y.toFixed(2)] : null, dock: pd ? pd.dock : null, pond: pd ? [pd.x, pd.z, pd.r, pd.axis] : null };
   },
   trailDbg: () => {
     if (!trailMesh) return [0, []];
@@ -5889,6 +5970,34 @@ window.__w = {
     return { key: pd.key,
       side: +Math.hypot(x1 - pd.x, z1 - pd.z).toFixed(2),
       end: +Math.abs(Math.hypot(x2 - pd.x, z2 - pd.z) - (pd.r + 1.5)).toFixed(2) };
+  }),
+  // one runnable check for the pier: walk her down it one frame-step at a time,
+  // through the same pushOut the frame loop uses.  end must land on a+0.2 (she
+  // stops at the water end), slip must stay tiny (no shove back up the boards),
+  // side must stay inside the 1.05 rails.
+  pier: () => [...ponds.values()].filter((pd) => pd.dock).map((pd) => {
+    const d = pd.dock, mid = (d.a + d.b) / 2;
+    const along = (x, z) => (x - d.x) * d.dx + (z - d.z) * d.dz;
+    const across = (x, z) => (x - d.x) * d.nx + (z - d.z) * d.nz;
+    let x = d.x + d.dx * mid, z = d.z + d.dz * mid;
+    player.position.set(x, 0, z);
+    let slip = 0, side = 0, big = null;
+    for (let i = 0; i < 60; i++) {                 // 60 x 0.15 m = well past the end
+      const px0 = x, pz0 = z;
+      const [nx, nz] = pushOut(x - d.dx * 0.15, z - d.dz * 0.15);
+      const step = Math.hypot(nx - x, nz - z);
+      if (!big && step > 1) big = { i, from: [+px0.toFixed(1), +pz0.toFixed(1)], to: [+nx.toFixed(1), +nz.toFixed(1)], along: +along(px0, pz0).toFixed(2) };
+      slip = Math.max(slip, step - 0.15);
+      x = nx; z = nz;
+      player.position.set(x, 0, z);
+    }
+    const end = along(x, z);
+    player.position.set(d.x + d.dx * mid, 0, d.z + d.dz * mid);
+    const [sx, sz] = pushOut(d.x + d.dx * mid + d.nx * 1.8, d.z + d.dz * mid + d.nz * 1.8);
+    side = across(sx, sz);
+    player.position.set(d.x + d.dx * mid, 0, d.z + d.dz * mid);
+    return { key: pd.key, end: +end.toFixed(2), want: +(d.a + 0.2).toFixed(2),
+      slip: +slip.toFixed(2), side: +side.toFixed(2), big };
   }),
   rawWet: () => {
     let inStream = 0, inPond = 0;
