@@ -237,8 +237,10 @@ const moonDisc = new THREE.Mesh(new THREE.CircleGeometry(7, 18), discMat(0xe6eff
   const lit = (1 - Math.cos((age / SYN) * Math.PI * 2)) / 2;   // 0 new, 1 full
   const R = 7, waxing = age < SYN / 2;
   // dark part = the unlit limb plus the terminator ellipse: a real crescent or
-  // gibbous instead of a circle sliding across the face
-  const a = R * (2 * lit - 1), sh = new THREE.Shape();
+  // gibbous instead of a circle sliding across the face. (1 - 2*lit), not
+  // (2*lit - 1): the mask has to cover the UNLIT part, so at lit 0 it is the
+  // whole disc and at lit 1 it is nothing.
+  const a = R * (1 - 2 * lit), sh = new THREE.Shape();
   sh.absarc(0, 0, R, Math.PI / 2, Math.PI * 1.5, false);
   if (a >= 0) sh.absellipse(0, 0, a, R, -Math.PI / 2, Math.PI / 2, false);
   else sh.absellipse(0, 0, -a, R, Math.PI * 1.5, Math.PI / 2, true);
@@ -351,8 +353,34 @@ function shadowBlob(size) {
   return m;
 }
 const geo = {
-  flower: new THREE.OctahedronGeometry(0.19, 0).translate(0, 0.3, 0),
-  crystal: new THREE.OctahedronGeometry(0.44, 0).scale(1, 1.9, 1).translate(0, 0.7, 0),
+  // five petals leaning out of a small centre: a bloom, not a diamond
+  flower: (() => {
+    const ps = [];
+    for (let i = 0; i < 5; i++) {
+      const g = new THREE.PlaneGeometry(0.15, 0.24);
+      g.rotateY(Math.PI / 2);                             // face outward, stand it upright
+      g.translate(0.06, 0.17, 0);                         // step out from the middle, lift it
+      g.rotateZ(-0.42);                                   // splay the top away from the centre
+      g.rotateY((i / 5) * Math.PI * 2);
+      ps.push(g);
+    }
+    const mid = new THREE.CircleGeometry(0.055, 6);       // the eye in the middle
+    mid.rotateX(-Math.PI / 2);
+    ps.push(mid);
+    ps.push(new THREE.CylinderGeometry(0.012, 0.02, 0.2, 3).translate(0, 0.1, 0));  // a stem, so it stands
+    return mergeGeometries(ps, false).translate(0, 0.2, 0);
+  })(),
+  // three shards leaning into each other, not one floating crystal
+  crystal: (() => {
+    const ps = [];
+    for (const [lean, tall] of [[-0.34, 1.15], [0, 2.0], [0.36, 1.35]]) {
+      const g = new THREE.OctahedronGeometry(0.2, 0).scale(1, tall, 1);
+      g.rotateZ(lean);
+      g.translate(lean * 0.55, 0.2 * tall, 0);
+      ps.push(g);
+    }
+    return mergeGeometries(ps, false);
+  })(),
   // a clump, not a ball: vertices knocked off the sphere by their own position,
   // so shared corners move together and no cracks open between faces
   bush: (() => {
@@ -380,8 +408,12 @@ function pool(g, m, cap) {
   return mesh;
 }
 const pools = {
-  flower: pool(geo.flower, mat({ color: 0xf2a0c8 }), 700),
-  crystal: pool(geo.crystal, mat({ color: 0xa06be0, emissive: 0x3a1b6b, emissiveIntensity: 1 }), 200),
+  flower: pool(geo.flower, mat({ color: 0xf2a0c8, side: THREE.DoubleSide }), 700),
+  // pale glass rather than a solid purple gem: low opacity so the grass shows
+  // through it, and only a cool glow so it still reads at night
+  crystal: pool(geo.crystal, mat({ color: 0xdcdcff, emissive: 0x9a86e0, emissiveIntensity: 0.5,
+    roughness: 0.12, metalness: 0.0, transparent: true, opacity: 0.5, depthWrite: false,
+    side: THREE.DoubleSide }), 200),
   bush: pool(geo.bush, mat({ color: 0x3f8a3c }), 400),
   // tuft: built from grass.glb once it lands -- a cone here read as a green spike
   mush: pool(geo.mush, mat({ color: 0xe06a7a }), 90),
@@ -404,7 +436,7 @@ new GLTFLoader().load('/models/grass.glb', (g) => {
   pools.grass = pool(geoG, mG, 320);
   pools.grass.castShadow = false;
   // same clump doubles as the scattered tuft cover, smaller and windier
-  const mt = windify(mat({ color: 0x6fae55 }), '0.12');
+  const mt = windify(mat({ color: 0x5d9a49 }), '0.12');   // sits in the ground colour instead of glowing out of it
   pools.tuft = pool(geoG, mt, 1200);
   pools.tuft.castShadow = false;
   rebuild();
@@ -449,6 +481,25 @@ const loadPack = (url, fn) => new GLTFLoader().load(url, (gl) => {
   try { fn(gl); } catch (e) { console.warn('pack', url, e); }
   rebuild();
 }, undefined, () => {});
+
+// the pickups have real models now: a faceted crystal rock for the spark and a
+// hibiscus for the bloom, colours baked per vertex so petals and stem stay apart
+const swapGeo = (key, url, h) => loadPack(url, (gl) => {
+  const ps = fitAll(partsOf(gl), h);
+  // flower_hib.glb already carries the hibiscus map as vertex colours; re-baking
+  // would flatten it to one flat colour
+  const g = ps[0].geo.attributes.color ? mergeGeometries(ps.map((q) => q.geo), false) : bake(ps);
+  pools[key].geometry.dispose();
+  pools[key].geometry = g;
+  pools[key].userData.own = true;      // the model brings its own colours
+  if (key === 'flower') {
+    pools[key].material.vertexColors = true;
+    pools[key].material.color.set(0xffffff);
+    pools[key].material.needsUpdate = true;
+  }
+});
+swapGeo('crystal', '/models/crystal_rock.glb', 0.8);
+swapGeo('flower', '/models/flower_hib.glb', 0.42);
 
 // authored hot-air balloon: a POSITION-only blockout, so normals and a two-tone
 // vertex colour get built once here and every camp reuses the geometry
@@ -769,10 +820,11 @@ function rebuild() {
         col.setScalar(0.92 + p.tone * 0.12);
         put(['rockFlat', 'rockB', 'rockC'][tier], rs, rs, rs, -0.06 * rs);
       } else if (p.type === 'flower') {
-        col.setHSL([0.9, 0.13, 0.75, 0.55][Math.floor(p.tone * 4)], 0.62, 0.62);
+        if (pools.flower.userData.own) col.setScalar(0.9 + p.tone * 0.2);   // the tulip is already coloured
+        else col.setHSL([0.9, 0.13, 0.75, 0.55][Math.floor(p.tone * 4)], 0.62, 0.62);
         put('flower', p.s, p.s, p.s);
       } else if (p.type === 'crystal') {
-        col.setHSL(0.76, 0.5, 0.58);
+        col.setHSL(0.68, 0.45, 0.8);    // lilac frost: a hint of purple, still see-through
         put('crystal', p.s, p.s, p.s);
       } else if (p.type === 'bush') {
         const berry = p.tone >= 0.5 && pools.bush1;
@@ -784,7 +836,7 @@ function rebuild() {
         put('grass', p.s * 1.5, p.s * 1.5 * (0.9 + p.tone * 0.3), p.s * 1.5);
       } else {
         col.setHSL(0.26 + p.tone * 0.06, 0.42, 0.28 + p.tone * 0.1);
-        put('tuft', p.s, p.s * (0.7 + p.tone * 0.7), p.s);
+        put('tuft', p.s * 1.7, p.s * (0.35 + p.tone * 0.25), p.s * 1.7);   // squat and wide, so blades read as cover not spikes
       }
     }
   }
@@ -902,6 +954,36 @@ new GLTFLoader().load('/models/emma.glb', (g) => {
   if (!armL || !armR || !legL || !legR) return;     // bad asset -> quietly stay on the primitives
   player.userData.arms.splice(0, 2, armL, armR);
   player.userData.legs.splice(0, 2, legL, legR);
+
+  // Shoulders. The puff was a ball 35% fatter than the arm sitting in it, so she
+  // read as bulbous. Shrink it, hand it to the chest as a socket, then give each
+  // arm a clavicle (leads at 0.3) and an elbow (the capsule split at its middle).
+  const chest = root.getObjectByName('chest');
+  const clavs = [], elbows = [];
+  [[armL, 'puff1', 'arm+1', 'hand+1'], [armR, 'puff-1', 'arm-1', 'hand-1']].forEach(([arm, pn, an, hn]) => {
+    const puff = root.getObjectByName(pn);
+    if (puff) {
+      puff.scale.setScalar(0.72);          // r 0.058, just inside the arm's own radius
+      chest.attach(puff);
+      puff.position.x -= 0.025 * Math.sign(puff.position.x || 1);   // tuck it inboard
+    }
+    const upper = arm.getObjectByName(an), hand = arm.getObjectByName(hn);
+    const clav = new THREE.Group();
+    clav.position.copy(arm.position);
+    arm.position.set(0, 0, 0);
+    chest.add(clav); clav.add(arm);
+    const el = new THREE.Group(); el.position.set(0, -0.22, 0); arm.add(el);
+    if (upper) {
+      const fore = upper.clone();                 // shares the geometry, second half
+      upper.scale.y = 0.5; upper.position.set(0, -0.11, 0);
+      fore.scale.y = 0.5; fore.position.set(0, -0.11, 0);
+      el.add(fore);
+    }
+    if (hand) { hand.position.y += 0.22; el.add(hand); }
+    clavs.push(clav); elbows.push(el);
+  });
+  player.userData.clavs = clavs;
+  player.userData.elbows = elbows;
   player.remove(emmaPrim);
   player.add(root);
   outline(root, 1.055, new THREE.MeshBasicMaterial({ color: 0xff80ff, side: THREE.BackSide }));
@@ -2101,7 +2183,7 @@ function paintCave(ctx, S, big) {
   const L = caveRoom.lake, [lx, lz] = P(L.x, L.z);
   ctx.beginPath(); ctx.arc(lx, lz, L.r * k, 0, 7);
   ctx.fillStyle = 'rgba(78,148,198,.72)'; ctx.fill();
-  if (caveRoom.ledge) {
+  if (caveRoom.ledge && !caveRoom.rot) {
     const [ax, az] = P(LEDGE.x0, LEDGE.z0), [bx, bz] = P(LEDGE.x1, LEDGE.z1);
     ctx.fillStyle = 'rgba(126,110,168,.5)'; ctx.fillRect(ax, az, bx - ax, bz - az);
   }
@@ -3533,17 +3615,79 @@ function caveWormDots(g) {
 
 // a wide, long hall with two side chambers and a deep pool room. A door sits in
 // each neck; the deep one wants three crystals, the side ones a task.
-const CAVE_ROOMS = [
-  { x: 0, z: 0, rx: 26, rz: 38, h: 17 },
-  { x: -30, z: -4, rx: 13, rz: 11, h: 10 },
-  { x: 30, z: -4, rx: 13, rz: 11, h: 10 },
-  { x: 0, z: -46, rx: 20, rz: 16, h: 14 },
-];
-const CAVE_DOORS = [
-  { id: 'deep', axis: 'z', x: 0, z: -34, hw: 1.1, hl: 13, kind: 'crystal' },
-  { id: 'west', axis: 'x', x: -21.5, z: -4, hw: 1.1, hl: 11, kind: 'math' },
-  { id: 'east', axis: 'x', x: 21.5, z: -4, hw: 1.1, hl: 11, kind: 'math' },
-];
+// each kind brings its own floor plan: how big the hall is, how high the roof
+// sits, and where the vault -- the room behind the crystal door -- lives.
+// rooms[0] is the hall and always reaches the mouth at z 36.5; rooms[vault] is
+// the vault, and the door whose kind is 'crystal' is the one into it.
+const CAVE_LAYOUTS = {
+  crystal: {   // wide hall, a chamber either side, vault straight ahead
+    vault: 3,
+    rooms: [
+      { x: 0, z: 0, rx: 26, rz: 38, h: 17 },
+      { x: -30, z: -4, rx: 13, rz: 11, h: 10 },
+      { x: 30, z: -4, rx: 13, rz: 11, h: 10 },
+      { x: 0, z: -46, rx: 20, rz: 16, h: 14 },
+    ],
+    doors: [
+      { id: 'deep', axis: 'z', x: 0, z: -34, hw: 1.1, hl: 13, kind: 'crystal' },
+      { id: 'west', axis: 'x', x: -21.5, z: -4, hw: 1.1, hl: 11, kind: 'math' },
+      { id: 'east', axis: 'x', x: 21.5, z: -4, hw: 1.1, hl: 11, kind: 'math' },
+    ],
+  },
+  gallery: {   // one long hall, no side chambers: the vault is through the west wall
+    vault: 2,
+    rooms: [
+      { x: 0, z: -6, rx: 16, rz: 44, h: 13 },
+      { x: 30, z: 14, rx: 12, rz: 11, h: 9 },
+      { x: -32, z: -6, rx: 19, rz: 15, h: 11 },
+    ],
+    doors: [
+      { id: 'west', axis: 'x', x: -14, z: -6, hw: 1.1, hl: 12, kind: 'crystal' },
+      { id: 'east', axis: 'x', x: 14, z: 14, hw: 1.1, hl: 11, kind: 'math' },
+    ],
+  },
+  den: {       // low and cramped: the vault is through the east wall
+    vault: 2,
+    rooms: [
+      { x: 0, z: 8, rx: 12, rz: 30, h: 9 },
+      { x: -26, z: -6, rx: 11, rz: 10, h: 8 },
+      { x: 33, z: 6, rx: 19, rz: 15, h: 8 },
+    ],
+    doors: [
+      { id: 'east', axis: 'x', x: 11, z: 6, hw: 1.1, hl: 12, kind: 'crystal' },
+      { id: 'west', axis: 'x', x: -11, z: -6, hw: 1.1, hl: 10, kind: 'math' },
+    ],
+  },
+  deep: {      // the stairwell: the vault sits 3.2 m down at the north end
+    vault: 3,
+    rooms: [
+      { x: 0, z: 0, rx: 26, rz: 38, h: 20 },
+      { x: -30, z: -4, rx: 13, rz: 11, h: 12 },
+      { x: 30, z: -4, rx: 13, rz: 11, h: 12 },
+      { x: 0, z: -46, rx: 20, rz: 16, h: 18 },
+    ],
+    doors: [
+      { id: 'deep', axis: 'z', x: 0, z: -34, hw: 1.1, hl: 13, kind: 'crystal' },
+      { id: 'west', axis: 'x', x: -21.5, z: -4, hw: 1.1, hl: 11, kind: 'math' },
+      { id: 'east', axis: 'x', x: 21.5, z: -4, hw: 1.1, hl: 11, kind: 'math' },
+    ],
+  },
+  summit: {    // a tall narrow chimney, vault through the east wall
+    vault: 2,
+    rooms: [
+      { x: 0, z: 6, rx: 13, rz: 32, h: 30 },
+      { x: -2, z: -40, rx: 11, rz: 10, h: 12 },
+      { x: 32, z: 10, rx: 19, rz: 15, h: 22 },
+    ],
+    doors: [
+      { id: 'east', axis: 'x', x: 12, z: 10, hw: 1.1, hl: 12, kind: 'crystal' },
+      { id: 'north', axis: 'z', x: 0, z: -22, hw: 1.1, hl: 11, kind: 'math' },
+    ],
+  },
+};
+// set from the layout at build time, so every reader below stays one line
+let CAVE_ROOMS = CAVE_LAYOUTS.crystal.rooms;
+let CAVE_DOORS = CAVE_LAYOUTS.crystal.doors;
 const LEDGE = { x0: 6, x1: 18.6, z0: -56, z1: -44, h: 4.2 };
 // where the hall floor drops into the lower room: 8 m of run for 3.2 m of fall
 const STAIR = { z1: -38, z0: -46, h: 3.2, w: 7 };
@@ -3554,13 +3698,26 @@ const inRoom = (r, x, z, t = 0) => ((x - r.x) / (r.rx + t)) ** 2 + ((z - r.z) / 
 const keyNum = (key) => Math.abs([...key].reduce((a, c) => (Math.imul(a, 31) + c.charCodeAt(0)) | 0, 7));
 const CAVE_NAMES = ['Cupcake', 'Mossy', 'Whisper', 'Crystal', 'Sleepy', 'Toadstool', 'Marble',
   'Moonbeam', 'Pebble', 'Honey', 'Bramble', 'Puddle', 'Glimmer', 'Acorn', 'Feather', 'Mittens'];
-const caveName = (c) => `${CAVE_NAMES[keyNum(c.key) % CAVE_NAMES.length]} Cave`;
+const CAVE_NOUNS = ['Hollow', 'Dell', 'Rest', 'Nook', 'Burrow', 'Grotto', 'Den', 'Glade',
+  'Hush', 'Warren', 'Shelf', 'Rill', 'Bower', 'Cove', 'Nest', 'Hearth'];
+const CAVE_ENDS = ['Cave', 'Hollow', 'Dell', 'Grotto'];
+// 16x16x4 = 1024 names from three independent bit fields of one well-mixed hash
+const keyHash = (key) => {
+  let h = 2166136261;
+  for (const ch of key) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+  h ^= h >>> 15; h = Math.imul(h, 2246822507); h ^= h >>> 13;
+  return h >>> 0;
+};
+const caveName = (c) => {
+  const h = keyHash(c.key);
+  return `${CAVE_NAMES[h & 15]} ${CAVE_NOUNS[(h >>> 4) & 15]} ${CAVE_ENDS[(h >>> 8) & 3]}`;
+};
 
 // four kinds, picked by the same key: what is inside, not just what colour it is
 const CAVE_KINDS = [
   { id: 'crystal', rock: 0x8d8478, floor: 0x6b5a46, ledge: 1, nook: 0, stair: 0, bats: 3, moss: 16, spring: 1 },
   { id: 'gallery', rock: 0x7f8a80, floor: 0x5f6a58, ledge: 0, nook: 0, stair: 0, bats: 1, moss: 34, spring: 1 },
-  { id: 'den',     rock: 0x8a7a66, floor: 0x6a5643, ledge: 0, nook: 1, stair: 0, bats: 0, moss: 24, spring: 0 },
+  { id: 'den',     rock: 0x8a7a66, floor: 0x6a5643, ledge: 0, nook: 1, stair: 0, bats: 0, moss: 24, spring: 0, glow: 0 },
   { id: 'deep',    rock: 0x7b8496, floor: 0x5a5f6e, ledge: 0, nook: 1, stair: 1, bats: 3, moss: 12, spring: 1 },
   // the climb: no stairwell, just the stone steps up the east side to the old box
   { id: 'summit',  rock: 0x86807a, floor: 0x635a4e, ledge: 1, nook: 0, stair: 0, bats: 2, moss: 18, spring: 1 },
@@ -3570,10 +3727,15 @@ const caveKind = (key, force) => force || CAVE_KINDS[keyNum(key) % CAVE_KINDS.le
 // the ledge is a ramp, not a shelf: no vertical face to get stuck in
 function caveGround(x, z) {
   if (!caveRoom) return 0;
+  // the vault is built in its own local space and then turned to face the hall,
+  // so a point is un-turned before it is tested against the ledge
+  const R = caveRoom.rot || 0, c = Math.cos(R), s = Math.sin(R);
+  const dx = x - caveRoom.vault.x, dz = z - caveRoom.vault.z;
+  const lx = dx * c - dz * s, lz = dx * s + dz * c;
   const L = caveRoom.ledge;
-  if (L && x > L.x0 && x < L.x1 && z > L.z0 && z < L.z1) return Math.min(L.h, ((x - L.x0) / (L.x1 - L.x0)) * L.h);
+  if (L && lx > L.x0 && lx < L.x1 && lz > L.z0 && lz < L.z1) return Math.min(L.h, ((lx - L.x0) / (L.x1 - L.x0)) * L.h);
   const S = caveRoom.stair;
-  if (S && Math.abs(x) < 19) {
+  if (S && !R && Math.abs(x) < 19) {
     // the neck into the deep room is a ramp, steps drawn on top of it
     return -S.h * Math.min(1, Math.max(0, (S.z1 - z) / (S.z1 - S.z0)));
   }
@@ -3622,6 +3784,15 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
   if (caveRoom) { caveScene.remove(caveRoom.g); caveRoom = null; }
   const num = keyNum(key);
   const K = caveKind(key, forceKind);
+  const LAY = CAVE_LAYOUTS[K.id];
+  CAVE_ROOMS = LAY.rooms;
+  CAVE_DOORS = LAY.doors;
+  const HALL = CAVE_ROOMS[0];
+  const vault = CAVE_ROOMS[LAY.vault];
+  // the vault faces away from the hall, so its local -Z always points at the back wall
+  const rot = vault.x > HALL.x + 2 ? -Math.PI / 2 : vault.x < HALL.x - 2 ? Math.PI / 2 : 0;
+  const cR = Math.cos(rot), sR = Math.sin(rot);
+  const W = (lx, lz) => [vault.x + lx * cR + lz * sR, vault.z - lx * sR + lz * cR];
   const rnd = mulberry(hash2(num, 7, save.seed));
   const g = new THREE.Group();
   const rockMat = new THREE.MeshStandardMaterial({ color: K.rock, emissive: 0x2b2620, roughness: 1, flatShading: true });
@@ -3632,10 +3803,16 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
   const pond = K.spring ? { x: 11.5, z: 7.5, r: 3.4 } : null;
   // the deep room sits lower when the way in is a stair
   const y0 = K.stair ? -3.2 : 0;
-  const deepRoom = CAVE_ROOMS[3];
+  const deepRoom = vault;
   const deep = new THREE.Group();   // everything in the lower room rides this
-  deep.position.y = y0;
+  deep.position.set(vault.x, y0, vault.z);
+  deep.rotation.y = rot;
   g.add(deep);
+  // the vault's props are authored around a room centred at the origin; this
+  // inner group carries the old authored coordinates over unchanged
+  const dv = new THREE.Group();
+  dv.position.z = 46;
+  deep.add(dv);
   // every rock she can see inside is also a rock she can walk into: the room
   // clamp alone stops her at the ellipse, which is metres inside the wall rocks
   const solids = [];
@@ -3717,7 +3894,7 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
   const sn = 260, spos = new Float32Array(sn * 3);
   for (let i = 0; i < sn; i++) {
     const a = rnd() * Math.PI * 2, y = 0.1 + rnd() * 0.9, rr = Math.sqrt(1 - y * y);
-    spos.set([Math.cos(a) * rr * 24, y * 16, Math.sin(a) * rr * 35], i * 3);
+    spos.set([HALL.x + Math.cos(a) * rr * HALL.rx * 0.92, y * 16, HALL.z + Math.sin(a) * rr * HALL.rz * 0.92], i * 3);
   }
   const sgeo = new THREE.BufferGeometry();
   sgeo.setAttribute('position', new THREE.BufferAttribute(spos, 3));
@@ -3728,7 +3905,7 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
   const lake = new THREE.Mesh(new THREE.CircleGeometry(lr, 26), new THREE.MeshStandardMaterial({ color: 0x3d86c0, emissive: 0x123048, roughness: 0.15, metalness: 0.35 }));
   lake.rotation.x = -Math.PI / 2;
   lake.position.set(lx, 0.05, lz);
-  deep.add(lake);
+  dv.add(lake);
 
   // the back wall has to fit under the roof dome: at the old z the dome was only
   // ~7 m high, so the top half of the fall sat behind rock and never showed
@@ -3737,7 +3914,7 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
   const fallZ = -56.8, fallW = 5.6, fallH = 4.2, lipY = 4.2, lipR = 0.62;
   const wall = new THREE.Mesh(new THREE.BoxGeometry(22, 9.4, 3.2), rockMat);
   wall.position.set(0, 4.2, -60.6);   // set back, so the ledge reads as a shelf in front of it
-  deep.add(wall);
+  dv.add(wall);
 
   // a rock ledge juts out of the wall and the stream runs along the top of it,
   // so the fall comes over an edge. It used to start under a dark slot box,
@@ -3747,13 +3924,13 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
   const ledge = new THREE.Mesh(new THREE.BoxGeometry(fallW + 8, 0.7, 3.6), rockMat);
   ledge.position.set(0, lipY - 0.35, fallZ - lipR - 1.8);
   ledge.receiveShadow = true;
-  deep.add(ledge);
+  dv.add(ledge);
   for (const [dx, dz, rr0] of [[-4.3, 0.1, 1.15], [4.4, -0.2, 1.25], [-5.6, -1.5, 1.5], [5.7, -1.4, 1.45], [3.2, -2.4, 1.05], [-3.0, 0.35, 0.85], [3.1, 0.3, 0.9]]) {
     const rk = new THREE.Mesh(new THREE.DodecahedronGeometry(rr0, 0), rockMat);
     rk.position.set(dx, lipY + rr0 * 0.25, fallZ - lipR + dz);
     rk.rotation.set(dx * 0.2, dz, rr0);
     rk.castShadow = true;
-    deep.add(rk);
+    dv.add(rk);
   }
   // rocks flanking the drop, so the sheet's straight sides end in stone
   for (const [x, dz, y, sy, rr0] of [[-3.7, -0.1, 1.5, 2.2, 1.15], [3.8, -0.3, 1.4, 2.0, 1.05], [-5.0, 0.2, 0.6, 1.2, 1.3], [5.1, 0.1, 0.6, 1.1, 1.2]]) {
@@ -3762,13 +3939,13 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
     rk.scale.set(1, sy, 1);
     rk.rotation.y = x * 0.3;
     rk.castShadow = true;
-    deep.add(rk);
+    dv.add(rk);
   }
   // the stream lying on the ledge before it drops
   const ledgeWater = new THREE.Mesh(new THREE.PlaneGeometry(fallW + 0.9, 2.4), streamMat);
   ledgeWater.rotation.x = -Math.PI / 2;
   ledgeWater.position.set(0, lipY + 0.02, fallZ - lipR - 1.2);
-  deep.add(ledgeWater);
+  dv.add(ledgeWater);
 
   // vertical streaks scrolled downward: one texture per sheet so they can run
   // at different speeds and read as depth, not as a wallpaper
@@ -3805,7 +3982,7 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
       new THREE.MeshBasicMaterial({ map: tex, color: 0xdff2ff, transparent: true, opacity: op, depthWrite: false,
         blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false }));
     sh.position.set(0, lipY - lipR - fallH / 2, fallZ + dz);
-    deep.add(sh);
+    dv.add(sh);
     sheets.push({ tex, sp });
   }
   // the bend over the lip: the same streaks swept round a quarter circle, so the
@@ -3817,18 +3994,18 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
       p.setXYZ(i, p.getX(i), lipY - lipR + lipR * Math.cos(a), fallZ - lipR + lipR * Math.sin(a));
     }
     const tex = streakTex();
-    deep.add(new THREE.Mesh(g2, new THREE.MeshBasicMaterial({ map: tex, color: 0xdff2ff, transparent: true,
+    dv.add(new THREE.Mesh(g2, new THREE.MeshBasicMaterial({ map: tex, color: 0xdff2ff, transparent: true,
       opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false })));
     sheets.push({ tex, sp: 1.4 });
   }
   // foam breaking along the lip, so the crest reads as water turning a corner
   const lipFoam = new THREE.Mesh(new THREE.BoxGeometry(fallW + 0.5, 0.1, 0.5), foamMat);
   lipFoam.position.set(0, lipY - 0.02, fallZ - lipR + 0.2);
-  deep.add(lipFoam);
+  dv.add(lipFoam);
   const foam = new THREE.Mesh(new THREE.CylinderGeometry(3.0, 3.6, 0.14, 18),
     new THREE.MeshBasicMaterial({ color: 0xeaf6ff, transparent: true, opacity: 0.5, depthWrite: false }));
   foam.position.set(0, 0.12, fallZ + 0.3);
-  deep.add(foam);
+  dv.add(foam);
   // spray where it hits: 34 dots thrown up and outward, recycled forever
   const splash = (() => {
     const n = 34, pos = new Float32Array(n * 3), dat = [];
@@ -3842,21 +4019,21 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     const pts = new THREE.Points(geo, new THREE.PointsMaterial({ map: dotTex, color: 0xdff0ff, size: 0.34,
       transparent: true, opacity: 0.75, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
-    deep.add(pts);
+    dv.add(pts);
     return { pts, pos, dat, n };
   })();
   const mist = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTex, color: 0xcfe4ff, transparent: true, opacity: 0.42, blending: THREE.AdditiveBlending, depthWrite: false }));
   mist.position.set(0, 1.6, fallZ + 0.7);
   mist.scale.set(11, 7, 1);
-  deep.add(mist);
+  dv.add(mist);
   // a crack in the roof, and the moon coming through it
   const beam = new THREE.Mesh(new THREE.ConeGeometry(8.5, 17, 16, 1, true),
     new THREE.MeshBasicMaterial({ color: 0xbfa7ff, transparent: true, opacity: 0.05, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
   beam.position.set(lx, 8.5, lz);
-  deep.add(beam);
+  dv.add(beam);
   const crack = new THREE.PointLight(0x9fc0ff, 2.2, 30, 2);
   crack.position.set(lx, 13, lz);
-  deep.add(crack);
+  dv.add(crack);
 
   const boat = new THREE.Group();
   const hull = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.5, 3, 1, false, 0, Math.PI), new THREE.MeshStandardMaterial({ color: 0xfdf6ec, flatShading: true, side: THREE.DoubleSide }));
@@ -3865,7 +4042,7 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
   boat.add(hull);
   boat.position.set(lx + lr * 0.4, 0.04, lz);
   boat.rotation.y = 0.4;
-  deep.add(boat);
+  dv.add(boat);
 
   // a small spring in the first hall, the way the cave used to open
   if (pond) {
@@ -3898,14 +4075,14 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
       const h = ((i + 0.5) / 6) * LEDGE.h;
       const step = new THREE.Mesh(new THREE.BoxGeometry(2.1, h, LEDGE.z1 - LEDGE.z0), rockMat);
       step.position.set(LEDGE.x0 + (i + 0.5) * 2.1, h / 2, (LEDGE.z0 + LEDGE.z1) / 2);
-      deep.add(step);
+      dv.add(step);
     }
   }
   if (K.nook) {
     const spur = new THREE.Mesh(new THREE.BoxGeometry(3.2, 7.4, 10), rockMat);
     spur.position.set(10.4, 3.4, -51.5);
-    deep.add(spur);
-    for (const z of [-47.4, -51.5, -55.6]) solids.push({ x: 10.4, z, r: 2.1 });
+    dv.add(spur);
+    for (const z of [-47.4, -51.5, -55.6]) { const [sx, sz] = W(10.4, z + 46); solids.push({ x: sx, z: sz, r: 2.1 }); }
   }
   const chest = new THREE.Group();
   const box = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.5), new THREE.MeshStandardMaterial({ color: 0xc8a24a, metalness: 0.4, roughness: 0.5, flatShading: true }));
@@ -3915,7 +4092,7 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
   chest.add(box, lid);
   chest.position.set(15.6, K.ledge ? LEDGE.h + 0.02 : 0.02, K.nook ? -51.5 : -50);
   chest.visible = !save.treasure.includes(key);
-  deep.add(chest);
+  dv.add(chest);
   // something up the stairs to walk toward: a gold glow over the box, seen from
   // the hall floor across the whole room
   const shine = new THREE.Group();
@@ -3927,28 +4104,31 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
     new THREE.MeshBasicMaterial({ color: 0xffcf8a, transparent: true, opacity: 0.13, depthWrite: false,
       blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false }));
   shaft.position.y = 2.2;
-  const shineL = new THREE.PointLight(0xffc978, 2.2, 11, 2);
+  const shineL = new THREE.PointLight(0xffc978, K.glow === 0 ? 0 : 2.2, 11, 2);
   shineL.position.y = 1.6;
   shine.add(halo, shaft, shineL);
   shine.position.copy(chest.position);
   shine.visible = !save.treasure.includes(key);
-  deep.add(shine);
+  dv.add(shine);
 
   // three crystals, scattered anywhere on the hall floor
   const crystals = [];
   const crystalSpot = () => {
     for (let i = 0; i < 40; i++) {
-      const x = (rnd() * 2 - 1) * 21, z = -30 + rnd() * 50;          // clear of the stair, the necks and the door
-      if ((x / 23) ** 2 + (z / 34) ** 2 > 1) continue;                // inside the chamber, not in the wall
+      const x = HALL.x + (rnd() * 2 - 1) * (HALL.rx - 4);
+      const z = HALL.z + (rnd() * 2 - 1) * (HALL.rz - 6);
+      if (((x - HALL.x) / (HALL.rx - 3)) ** 2 + ((z - HALL.z) / (HALL.rz - 3)) ** 2 > 1) continue;
+      if (z > mouth.z - 10) continue;                                 // not in the entry tunnel
+      if (CAVE_DOORS.some((d) => Math.hypot(x - d.x, z - d.z) < 8)) continue;   // not in a neck
       if (crystals.some((c) => Math.hypot(c.x - x, c.z - z) < 9)) continue;
       return { x, z };
     }
-    return { x: 0, z: -18 };                                          // ponytail: 40 darts never missed; keeps the run finite
+    return { x: HALL.x, z: HALL.z };                                  // ponytail: 40 darts never missed; keeps the run finite
   };
   for (let i = 0; i < 3; i++) {
     const { x, z } = crystalSpot();
     const cg = new THREE.Group();
-    const glow = new THREE.PointLight(0xb18ce8, 1.5, 8, 2);
+    const glow = new THREE.PointLight(0xb18ce8, K.glow === 0 ? 0 : 1.5, 8, 2);
     glow.position.y = 1;
     cg.add(glow);
     for (let k = 0; k < 3; k++) {
@@ -4022,7 +4202,8 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
     };
     const wl = wing(-1), wr = wing(1);
     b.add(body, wl, wr);
-    const bx = (i - 1) * 8 + (rnd() - 0.5) * 4, bz = -6 - rnd() * 18, by = 6.2 + rnd() * 2.6;
+    const bx = HALL.x + (i - 1) * 8 + (rnd() - 0.5) * 4, bz = HALL.z - 6 - rnd() * 18;
+    const by = Math.min(HALL.h * 0.42, 6.2) + rnd() * 2.6;
     b.position.set(bx, by, bz);
     g.add(b);
     bats.push({ g: b, x: bx, z: bz, h: by, wl, wr, t: 0, ph: rnd() * 6 });
@@ -4079,8 +4260,10 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
   caveKey = key;
   caveRoom = {
     g, rooms: CAVE_ROOMS, crystals, chest, doors, bats, moss, mouth, solids, kind: K.id, floorY: y0,
+    vault, rot, vaultG: dv, glow: K.glow !== 0,
     ledge: K.ledge ? LEDGE : null, stair: K.stair ? STAIR : null,
-    arch: { g: arch, door: glowM, light: glowL }, lake: { x: lx, z: lz, r: lr }, worms, mist,
+    arch: { g: arch, door: glowM, light: glowL },
+    lake: { x: W(0, -6)[0], z: W(0, -6)[1], r: lr }, worms, mist,
     pond, shine, sheets, splash, fall: { x: 0, z: fallZ, w: fallW, h: fallH },
     frogs: [],   // spawned on the first caveTick: the GLB may still be in flight here
   };
@@ -4098,15 +4281,15 @@ function enterCave(c) {
     $('#camp').hidden = true;          // no tents under ten metres of rock
     promptEl.hidden = true; actEl.hidden = true; near = null;  // the fade let one last frame through
     caveScene.add(player, fluffy, lantern);
-    player.position.set(0, 0, 27);
+    player.position.set(0, 0, caveRoom.mouth.z - 9.5);
     player.rotation.y = Math.PI;
-    fluffy.position.set(1.2, 0, 26);
-    mossPrev.x = 0; mossPrev.z = 27; mossAcc = 0;
+    fluffy.position.set(1.2, 0, caveRoom.mouth.z - 10.5);
+    mossPrev.x = 0; mossPrev.z = caveRoom.mouth.z - 9.5; mossAcc = 0;
     camYaw = Math.PI; camNear = 6.6;
     lantern.intensity = 9;
     sfx.setEcho(true);
     for (const d of caveRoom.doors) if (d.open && d.kind === 'crystal') caveBeacon(d);
-    for (const k of caveRoom.crystals) { k.got = false; k.g.visible = true; k.light.intensity = 1.5; }
+    for (const k of caveRoom.crystals) { k.got = false; k.g.visible = true; k.light.intensity = caveRoom.glow ? 1.5 : 0; }
     caveRoom.chest.visible = !save.treasure.includes(caveKey);
     caveRoom.shine.visible = caveRoom.chest.visible;
     updateObjective();
@@ -4168,7 +4351,7 @@ function caveTick(dt, t) {
   caveRoom.ripAcc = (caveRoom.ripAcc || 0) + dt;
   if (caveRoom.ripAcc > 0.30) {
     caveRoom.ripAcc = 0;
-    ripple((Math.random() - 0.5) * caveRoom.fall.w * 0.9, caveRoom.fall.z + 0.4 + Math.random() * 0.7, 1.0, caveRoom.g, 0.072);
+    ripple((Math.random() - 0.5) * caveRoom.fall.w * 0.9, caveRoom.fall.z + 0.4 + Math.random() * 0.7, 1.0, caveRoom.vaultG, 0.072);
   }
   caveRoom.pondAcc = (caveRoom.pondAcc || 0) + dt;
   if (caveRoom.pond && caveRoom.pondAcc > 1.5) {
@@ -4180,7 +4363,7 @@ function caveTick(dt, t) {
   for (const c of caveRoom.crystals) {
     if (c.got) continue;
     c.g.rotation.y += dt * 0.9;
-    c.g.children[0].intensity = 1.2 + Math.sin(t * 2 + c.x) * 0.4;
+    c.g.children[0].intensity = caveRoom.glow ? 1.2 + Math.sin(t * 2 + c.x) * 0.4 : 0;
     if (caveT > 0.5 && Math.hypot(c.x - px, c.z - pz) < 1.4) {
       c.got = true; c.g.visible = false; c.light.intensity = 0;
       caveFound++;
@@ -4955,7 +5138,9 @@ function rigRod() {
   if (rodG) return;
   const { arms } = player.userData;
   rodG = new THREE.Group();
-  rodG.position.set(0, -0.42, 0);
+  // the forearm is its own group now, so the rod rides the elbow if there is one
+  const hold = player.userData.elbows ? player.userData.elbows[1] : arms[1];
+  rodG.position.set(0, player.userData.elbows ? -0.2 : -0.42, 0);
   rodG.rotation.x = 0.62;    // tip up off the arm line, so it reads as a held rod not an arm extension
   const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.04, 1.5, 5).translate(0, -0.75, 0), mat({ color: 0xe6d3a3 }));
   const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.034, 0.16, 6), mat({ color: 0x33241a }));
@@ -4967,7 +5152,7 @@ function rigRod() {
   rodG.add(pole, grip, tip, bead);
   rodG.userData.tip = tip;
   rodG.visible = false;
-  arms[1].add(rodG);
+  hold.add(rodG);
 
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(LINE_N * 3), 3));
@@ -5341,6 +5526,7 @@ function tick() {
 
   swingE += ((moving && !inBoat ? 0.55 : 0) - swingE) * Math.min(1, dt * 10);
   const { arms, legs } = player.userData;
+  const elbowT = [0.16, 0.16];
   if (inBoat) {
     for (const l of legs) { l.rotation.x = -1.5; l.visible = false; }  // knees under the dress
     for (const a of arms) { a.rotation.x = -0.95; a.rotation.z *= 0.6; }
@@ -5348,8 +5534,15 @@ function tick() {
     for (const l of legs) l.visible = true;
     legs[0].rotation.x = Math.sin(walk) * swingE;
     legs[1].rotation.x = -Math.sin(walk) * swingE;
-    arms[0].rotation.x = -Math.sin(walk) * swingE * 0.6;
-    arms[1].rotation.x = Math.sin(walk) * swingE * 0.6;
+    // arms lag the legs a few frames, are not quite symmetrical, and splay out a
+    // little more the faster she goes
+    const sw = Math.sin(walk - 0.3) * swingE;
+    arms[0].rotation.x = -sw * 0.55;
+    arms[1].rotation.x = sw * 0.68;
+    arms[0].rotation.z = 0.07 + swingE * 0.05;
+    arms[1].rotation.z = -0.07 - swingE * 0.05;
+    elbowT[0] = 0.16 + Math.max(0, -sw) * 0.32;   // the forearm folds on the forward swing
+    elbowT[1] = 0.16 + Math.max(0, sw) * 0.32;
   }
   // hands: the rod, the thrown stone and the oars all drive the same arm bones
   if (throwT > 0) throwT = Math.max(0, throwT - dt);
@@ -5368,6 +5561,18 @@ function tick() {
   } else if (inBoat) {
     arms[0].rotation.x = arms[1].rotation.x = -0.8 + Math.sin(rowPh) * 0.4;
     arms[0].rotation.z = 0.25; arms[1].rotation.z = -0.25;
+  }
+
+  // clavicle and elbow follow whatever the arms just did; the rod and the oars
+  // pin the elbows at a fixed bend instead
+  const { clavs, elbows } = player.userData;
+  if (elbows) {
+    if (fishing || throwT > 0 || inBoat) elbowT[0] = elbowT[1] = 0.38;
+    for (let i = 0; i < 2; i++) {
+      elbows[i].rotation.x += (elbowT[i] - elbows[i].rotation.x) * Math.min(1, dt * 14);
+      clavs[i].rotation.x = arms[i].rotation.x * 0.3;
+      clavs[i].rotation.z = arms[i].rotation.z * 0.3;
+    }
   }
 
   // lean into the turn, settle back on stop (under-damped, so it overshoots once)
@@ -5617,7 +5822,9 @@ function tick() {
     updateNear();
     updateObjective();
     ensureFriends(player.position.x, player.position.z);
-    if (deer.length < 2 && Math.random() < 0.3) {
+    // only spawn once both rigs have landed: the hand-built stand-in used to
+    // appear before the GLBs finished and then stayed as a boxy deer forever
+    if (deer.length < 2 && ANIM_DEER.doe.src && ANIM_DEER.buck.src && Math.random() < 0.3) {
       const a = Math.random() * Math.PI * 2, d = 32 + Math.random() * 34;
       const r = Math.random();
       deer.push(makeDeer(player.position.x + Math.cos(a) * d, player.position.z + Math.sin(a) * d, r < 0.2 ? 'rabbit' : r < 0.64 ? 'buck' : 'doe'));
@@ -6064,6 +6271,7 @@ window.__w = {
   caveTest: (key = 'test-cave', kind) => { const K = CAVE_KINDS.find((x) => x.id === kind); enterCave({ key, force: K }); return kind || caveKind(key).id; },
   caveKindOf: (k) => caveKind(k).id,
   caveList: () => [...caves.values()].map((c) => [c.key, +c.x.toFixed(1), +c.z.toFixed(1)]),
+  caveNames: () => [...caves.values()].map((c) => [c.key, caveName(c)]),
   pushAt: (x, z) => pushOut(x, z),
   caveOff: (v = false) => { if (caveRoom) caveRoom.g.visible = !v; return true; },
   caveMask: (hide = []) => { const k = new Set(hide); caveRoom.g.children.forEach((o, i) => { o.visible = !k.has(i); }); return caveRoom.g.children.length; },
