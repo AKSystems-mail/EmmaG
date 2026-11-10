@@ -2086,7 +2086,7 @@ let bigOpen = false, objList = [], objId = save.obj || null;
 let bigRange = 420;              // metres across the big map; pinch changes it
 
 function youMarker(ctx, C, big) {
-  const a = player.rotation.y, pt = (ang, r) => [C + Math.sin(ang) * r, C + Math.cos(ang) * r];
+  const a = mapYaw, pt = (ang, r) => [C + Math.sin(ang) * r, C + Math.cos(ang) * r];
   ctx.beginPath();
   ctx.moveTo(...pt(a, big ? 16 : 11));
   ctx.lineTo(...pt(a + 2.5, big ? 11 : 8));
@@ -2116,7 +2116,7 @@ function paintMap(ctx, S, RANGE, big = false) {
   // the arrow keeps its old size and stays centred on C, so its nose is n px
   // ahead of C. shift the projection by that many metres instead: the nose is
   // then her real position, and the arrow still turns about its own centre.
-  const nose = (big ? 16 : 11) * (RANGE / C), ha = player.rotation.y;
+  const nose = (big ? 16 : 11) * (RANGE / C), ha = mapYaw;
   const ox = Math.sin(ha) * nose, oz = Math.cos(ha) * nose;
   const at = (x, z) => [C + ((x - px + ox) / RANGE) * C, C + ((z - pz + oz) / RANGE) * C];
   const dot = (x, z, fill, r, ring) => {
@@ -5532,7 +5532,8 @@ function foldBoat() {
 // ---------------------------------------------------------------- loop
 const clock = new THREE.Clock();
 let regionNow = regionKey(player.position.x, player.position.z);
-let lastGate = -99, walk = 0, mapAcc = 0, bridgeY = 0;
+let lastGate = -99, walk = 0, mapAcc = 0, bridgeY = 0, mapYaw = player.rotation.y;
+const MAP_TURN = 5;   // marker catch-up per second; drop toward 3 for a heavier lag, raise for a snappier nose
 // asked-once-per-thing, this session only: nobody wants the boat quiz twice
 const gateSeen = new Set();
 const SPD = 6.4, STRIDE = 4.7;
@@ -5548,6 +5549,10 @@ const fwd = new THREE.Vector3(), right = new THREE.Vector3(), want = new THREE.V
 function tick() {
   const dt = Math.min(clock.getDelta(), 0.05);
   const t = clock.elapsedTime;
+  // the map repaints 5x a second, so the body's 8/s turn still lands as a jump.
+  // lag the drawn heading a little further and the marker stops swivelling; both
+  // the arrow and the nose offset read mapYaw, so the geometry stays consistent
+  mapYaw += ((((player.rotation.y - mapYaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI)) * Math.min(1, dt * MAP_TURN);
 
   // movement
   let mx = input.x, my = input.y;
