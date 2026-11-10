@@ -13,6 +13,8 @@ const R = 130;        // a new land every 130 units
 const CH = 44;        // prop chunk size
 const VIEW = 2;       // chunks around the player (5x5)
 const SAVE = 'emmaworld.v2';
+// ?debug turns on the __w / __r harness hooks; a normal session never sees them
+const DBG = /[?&]debug\b/.test(location.search) || location.hostname === 'localhost';
 const TYPES = ['wood', 'stone', 'bloom', 'spark'];
 const LABEL = { wood: 'Wood', stone: 'Stone', bloom: 'Bloom', spark: 'Spark' };
 const ICON = { wood: 'Wood', stone: 'Stone', bloom: 'Bloom', spark: 'Spark' };
@@ -25,12 +27,14 @@ const isGone = (n, now = performance.now()) => {
 };
 
 // ---------------------------------------------------------------- state
-const store = JSON.parse(localStorage.getItem(SAVE) || '{}');
+// a half-written or evicted save used to throw here and kill the whole module (blank world)
+const store = (() => { try { return JSON.parse(localStorage.getItem(SAVE) || '{}') || {}; } catch { return {}; } })();
 const save = Object.assign(
   { seed: (Math.random() * 1e9) | 0, x: R / 2, z: R / 2, gates: [], restored: [], res: { wood: 0, stone: 0, bloom: 0, spark: 0 } },
   store,
 );
-if (save.x === 0 && save.z === 0) { save.x = R / 2; save.z = R / 2; }
+if (!Number.isFinite(save.x) || !Number.isFinite(save.z) || (save.x === 0 && save.z === 0)) save.x = save.z = R / 2;
+save.gates ||= []; save.res ||= { wood: 0, stone: 0, bloom: 0, spark: 0 };
 if (!save.gates.length) save.gates.push(regionKey(save.x, save.z));
 save.friends ||= []; save.camps ||= []; save.fireflies ||= false;
 save.journal ||= []; save.badges ||= []; save.catches ||= []; save.notes ||= [];
@@ -39,7 +43,9 @@ save.caves ||= []; save.treasure ||= [];
   save.mathLvl ||= 0; save.mStreak ||= 0; save.quests ||= {}; save.giant ||= false; save.giantN ||= 0; save.decor ||= [];
 save.crossed ||= 0; save.bestSkip ||= 0; save.boat ||= false;
 save.painting ||= ''; save.giftDay ||= '';
-const persist = () => { save.lastSeen = Date.now(); localStorage.setItem(SAVE, JSON.stringify(save)); };
+// ponytail: a full quota drops the write instead of the frame -- postcards are ~1 MB
+// of the 5 MB budget; prune save.postcards harder if kids hit it
+const persist = () => { save.lastSeen = Date.now(); try { localStorage.setItem(SAVE, JSON.stringify(save)); } catch { /* keep playing on the last good save */ } };
 
 function regionKey(x, z) { return `${Math.floor(x / R)},${Math.floor(z / R)}`; }
 function mulberry(a) {
@@ -86,7 +92,7 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.04;
-window.__r = renderer;   // TEMP shadow debug
+if (DBG) window.__r = renderer;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.1, 500);
@@ -97,9 +103,11 @@ scene.add(hemi);
 
 const sun = new THREE.DirectionalLight(0xfff3d6, 1.15);
 sun.castShadow = true;
-sun.shadow.mapSize.set(1024, 1024);
-Object.assign(sun.shadow.camera, { left: -28, right: 28, top: 28, bottom: -28, near: 1, far: 160 });
-sun.shadow.bias = -0.0018;
+sun.shadow.mapSize.set(2048, 2048);
+// the light sits 90 m out every frame: keep near/far tight so bias is world-scale,
+// not a 0.29 m slop that erased the shadow of anything shorter than a tree
+Object.assign(sun.shadow.camera, { left: -28, right: 28, top: 28, bottom: -28, near: 70, far: 130 });
+sun.shadow.bias = -0.0006;
 scene.add(sun, sun.target);
 
 const moon = new THREE.DirectionalLight(0xa8c4ff, 0);
@@ -338,7 +346,7 @@ function outline(root, k = 1.06, mat = OUTLINE) {
     if (!m.isMesh || m.userData.outline || !m.material?.isMeshToonMaterial) return;
     const o = new THREE.Mesh(m.geometry, mat);
     o.userData.outline = true;
-    o.scale.setScalar(k);
+    o.scale.setScalar(m.userData.outlineK || k);
     m.add(o);
   });
 }
@@ -974,12 +982,23 @@ new GLTFLoader().load('/models/emma.glb', (g) => {
     chest.add(clav); clav.add(arm);
     const el = new THREE.Group(); el.position.set(0, -0.22, 0); arm.add(el);
     if (upper) {
-      const fore = upper.clone();                 // shares the geometry, second half
-      upper.scale.y = 0.5; upper.position.set(0, -0.11, 0);
-      fore.scale.y = 0.5; fore.position.set(0, -0.11, 0);
+      // two capsules that share the elbow pivot, each keeping its own round cap:
+      // squashing one capsule in half pinched both ends to a point and no amount
+      // of joint ball hides the waist, so build the halves instead
+      const bb = upper.geometry.boundingBox || (upper.geometry.computeBoundingBox(), upper.geometry.boundingBox);
+      const r = Math.max(bb.max.x - bb.min.x, bb.max.z - bb.min.z) / 2;
+      const half = Math.abs(bb.max.y - bb.min.y) / 2;
+      const g2 = new THREE.CapsuleGeometry(r, Math.max(0.02, half - 2 * r), 4, 10);
+      upper.geometry = g2;
+      upper.scale.setScalar(1); upper.position.set(0, -half / 2, 0);
+      const fore = new THREE.Mesh(g2, upper.material);
+      fore.castShadow = upper.castShadow;
+      fore.userData.outlineK = 1.035;   // thinner hull: two full rims made a ring at the elbow
+      fore.position.set(0, -half / 2, 0);
       el.add(fore);
+      if (hand) hand.position.y += half;
     }
-    if (hand) { hand.position.y += 0.22; el.add(hand); }
+    if (hand) el.add(hand);
     clavs.push(clav); elbows.push(el);
   });
   player.userData.clavs = clavs;
@@ -1748,6 +1767,7 @@ function makePond(pd) {
   foam.position.y = 0.078;
   foam.scale.setScalar(pd.r);
   g.add(shore, water, foam);
+  pd.foam = foam;
 
   for (let i = 0; i < 5; i++) {
     const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.55 + Math.random() * 0.4, 0.55, 0.05, 7), mat({ color: 0x4f9450 }));
@@ -1820,7 +1840,18 @@ function ensurePond(rx, rz) {
       else for (const lm of landmarks.values()) if (Math.hypot(lm.x - fresh.x, lm.z - fresh.z) < fresh.r + 4) { blocked = true; break; }
     }
     if (blocked) pondSkip.add(k);
-    else if (fresh) { ponds.set(k, makePond(fresh)); return true; }
+    else if (fresh) {
+      ponds.set(k, makePond(fresh));
+      // a pond can load over a stone that was already standing there: put it on the bank
+      for (const lm of landmarks.values()) {
+        if (!inWater(lm.x, lm.z, 2)) continue;
+        const a = Math.atan2(lm.z - fresh.z, lm.x - fresh.x);
+        lm.x = fresh.x + Math.cos(a) * (fresh.r * 1.08 + 4);
+        lm.z = fresh.z + Math.sin(a) * (fresh.r * 1.08 + 4);
+        lm.group.position.set(lm.x, 0, lm.z);
+      }
+      return true;
+    }
   }
   return false;
 }
@@ -2082,7 +2113,12 @@ function paintMap(ctx, S, RANGE, big = false) {
   if (inCave && caveRoom) return paintCave(ctx, S, big);
   const C = S / 2, px = player.position.x, pz = player.position.z;
   ctx.clearRect(0, 0, S, S);
-  const at = (x, z) => [C + ((x - px) / RANGE) * C, C + ((z - pz) / RANGE) * C];
+  // the arrow keeps its old size and stays centred on C, so its nose is n px
+  // ahead of C. shift the projection by that many metres instead: the nose is
+  // then her real position, and the arrow still turns about its own centre.
+  const nose = (big ? 16 : 11) * (RANGE / C), ha = player.rotation.y;
+  const ox = Math.sin(ha) * nose, oz = Math.cos(ha) * nose;
+  const at = (x, z) => [C + ((x - px + ox) / RANGE) * C, C + ((z - pz + oz) / RANGE) * C];
   const dot = (x, z, fill, r, ring) => {
     const [dx, dz] = at(x, z);
     if (Math.hypot(dx - C, dz - C) > C - 6) return;
@@ -2265,13 +2301,15 @@ mapEl.onclick = () => (bigOpen ? closeBig() : openBig());
 }
 bigEl.onclick = (e) => { if (e.target === bigEl) closeBig(); };
 $('#bigclose').onclick = closeBig;
-$('#obj').onclick = () => {
+const cycleObjective = () => {
   if (objList.length < 2) return;
   const i = objList.findIndex((o) => o.id === objId);
   objId = save.obj = objList[(i + 1) % objList.length].id;
   persist(); updateObjective();
   if (bigOpen) renderBig();
 };
+$('#obj').onclick = cycleObjective;
+$('#objsw').onclick = cycleObjective;
 
 // ---------------------------------------------------------------- collections
 let bookTab = 'col';
@@ -2653,9 +2691,10 @@ function objectives() {
 }
 
 function updateObjective() {
-  const el = $('#obj');
+  const el = $('#obj'), sw = $('#objsw');
   if (!el) return;
   if (inCave) {
+    if (sw) sw.hidden = true;
     const open = caveRoom ? caveRoom.doors.filter((d) => d.open).length : 0;
     el.innerHTML = `Crystals <b>${caveFound}/3</b> · doors <b>${open}/3</b>`;
     return;
@@ -2664,7 +2703,8 @@ function updateObjective() {
   if (!objId || !objList.some((o) => o.id === objId)) objId = objList[0].id;
   const o = objList.find((q) => q.id === objId) || objList[0];
   const d = Math.round(Math.hypot(o.x - player.position.x, o.z - player.position.z));
-  el.innerHTML = `<b>${o.label}</b> · ${d}m${o.sub ? ` · ${o.sub}` : ''}${objList.length > 1 ? ' ↻' : ''}`;
+  el.innerHTML = `<b>${o.label}</b> · ${d}m${o.sub ? ` · ${o.sub}` : ''}`;
+  if (sw) sw.hidden = objList.length < 2;
 }
 
 // ---------------------------------------------------------------- critters
@@ -2932,7 +2972,8 @@ function updateNear() {
       actEl.textContent = save.res[type] >= need ? 'Wake it' : `${LABEL[type]} ${save.res[type]}/${need}`;
     }
   }
-  if (inBoat) {
+  // a stone standing in the water is only reachable by boat: let the wake win over Step out
+  if (inBoat && !(best && (best.kind === 'stone' || best.kind === 'giant'))) {
     promptEl.hidden = false; actEl.hidden = false;
     promptEl.textContent = 'Rowboat';
     actEl.textContent = 'Step out';
@@ -3048,7 +3089,10 @@ function solarDay(d) {
   const ha = Math.acos(cosH) / rad;                        // degrees
   sunRise = (noonUTC - 4 * ha + tz) / 60;
   sunSet = (noonUTC + 4 * ha + tz) / 60;
-  sunMax = Math.PI / 2 - Math.abs(lat - dec);              // peak elevation, radians
+  // ponytail: a real Atlanta November noon is only 39 deg, so midday shadow was
+  // 1.2x the caster. Floor the peak near 75 deg: short at noon, long only near
+  // the ends, which is how a kid reads a day. Sky colours still follow the arc.
+  sunMax = Math.max(1.30, Math.PI / 2 - Math.abs(lat - dec));   // peak elevation, radians
 }
 
 function updateSky() {
@@ -3206,11 +3250,16 @@ function pondExtras(pd) {
     return m;
   };
   const mid = (a0 + b0) / 2;
-  const strip = mk(new THREE.BoxGeometry(3, 0.06, len), streamMat, mid, 0, 0.07);
-  const bankL = mk(new THREE.BoxGeometry(1.1, 0.12, len), mat({ color: 0xcbb98b }), mid, -1.9, 0.06);
-  const bankR = mk(new THREE.BoxGeometry(1.1, 0.12, len), mat({ color: 0xcbb98b }), mid, 1.9, 0.06);
-  const frillL = mk(new THREE.BoxGeometry(0.22, 0.02, len), foamMat, mid, -1.3, 0.12);
-  const frillR = mk(new THREE.BoxGeometry(0.22, 0.02, len), foamMat, mid, 1.3, 0.12);
+  // the water starts under the pond's surface (0.045 vs 0.07): the pond covers the
+  // end, so the stream emerges instead of butting in with a square face
+  const av = pd.r * 0.35, am = (av + b0) / 2;
+  const strip = mk(new THREE.PlaneGeometry(3, b0 - av).rotateX(-Math.PI / 2), streamMat, am, 0, 0.045);
+  // banks and foam stop at the shore ring instead of ending 6 m out in open water
+  const bs = pd.r * 1.06, bm = (bs + b0) / 2, bl = b0 - bs;
+  const bankL = mk(new THREE.BoxGeometry(1.1, 0.12, bl), mat({ color: 0xcbb98b }), bm, -1.9, 0.06);
+  const bankR = mk(new THREE.BoxGeometry(1.1, 0.12, bl), mat({ color: 0xcbb98b }), bm, 1.9, 0.06);
+  const frillL = mk(new THREE.BoxGeometry(0.22, 0.02, bl), foamMat, bm, -1.3, 0.12);
+  const frillR = mk(new THREE.BoxGeometry(0.22, 0.02, bl), foamMat, bm, 1.3, 0.12);
   // waterfall: a heap of boulders the stream spills over, not a wall of stone
   const wall = new THREE.Group();
   for (const [dn, dd, sz] of [[0,0,1.9],[1.1,-1.5,1.35],[-1.2,1.4,1.45],[2.1,0.9,1.1],[-2.2,-0.9,1.15],[0.5,2.2,1.0],[-0.8,-2.3,1.05],[2.7,-1.9,0.9],[-2.9,1.8,0.95],[1.7,-0.4,1.2]]) {
@@ -3225,6 +3274,13 @@ function pondExtras(pd) {
   const foam = mk(new THREE.CylinderGeometry(1.9, 2.2, 0.1, 12), new THREE.MeshBasicMaterial({ color: 0xeaf6ff, transparent: true, opacity: 0.55, depthWrite: false }), b0 - 0.3, 0, 0.12);
   scene.add(strip, bankL, bankR, frillL, frillR, wall, fall, foam);
   pd.fall = fall;
+  // the ring's bright arc used to run straight across the mouth: cut the gap that
+  // the water passes through and spin it to the stream's bearing
+  if (pd.foam) {
+    const gap = Math.min(0.6, 3.4 / pd.r);
+    pd.foam.geometry = new THREE.RingGeometry(0.93, 1.0, 40, 1, gap / 2, Math.PI * 2 - gap);
+    pd.foam.rotation.z = Math.atan2(-uz, ux) - (pd.axis ? Math.PI / 2 : 0);
+  }
   pd.stream = { x: pd.x, z: pd.z, dx: ux, dz: uz, nx, nz, a: a0, b: b0 };
   pd.streamStones = [];
   for (let i = 0; i < 3; i++) {
@@ -3688,7 +3744,13 @@ const CAVE_LAYOUTS = {
 // set from the layout at build time, so every reader below stays one line
 let CAVE_ROOMS = CAVE_LAYOUTS.crystal.rooms;
 let CAVE_DOORS = CAVE_LAYOUTS.crystal.doors;
-const LEDGE = { x0: 6, x1: 18.6, z0: -56, z1: -44, h: 4.2 };
+const LEDGE = { x0: 6, x1: 18.6, z0: -56, z1: -44, h: 4.2, n: 12 };
+// the tread height under a local x — the stone and the feet use one formula, so
+// she stands on the steps instead of on a diagonal drawn through them
+const ledgeY = (lx) => {
+  const i = Math.min(LEDGE.n - 1, Math.max(0, Math.floor(((lx - LEDGE.x0) / (LEDGE.x1 - LEDGE.x0)) * LEDGE.n)));
+  return ((i + 0.5) / LEDGE.n) * LEDGE.h;
+};
 // where the hall floor drops into the lower room: 8 m of run for 3.2 m of fall
 const STAIR = { z1: -38, z0: -46, h: 3.2, w: 7 };
 const inRoom = (r, x, z, t = 0) => ((x - r.x) / (r.rx + t)) ** 2 + ((z - r.z) / (r.rz + t)) ** 2 <= 1;
@@ -3698,9 +3760,10 @@ const inRoom = (r, x, z, t = 0) => ((x - r.x) / (r.rx + t)) ** 2 + ((z - r.z) / 
 const keyNum = (key) => Math.abs([...key].reduce((a, c) => (Math.imul(a, 31) + c.charCodeAt(0)) | 0, 7));
 const CAVE_NAMES = ['Cupcake', 'Mossy', 'Whisper', 'Crystal', 'Sleepy', 'Toadstool', 'Marble',
   'Moonbeam', 'Pebble', 'Honey', 'Bramble', 'Puddle', 'Glimmer', 'Acorn', 'Feather', 'Mittens'];
-const CAVE_NOUNS = ['Hollow', 'Dell', 'Rest', 'Nook', 'Burrow', 'Grotto', 'Den', 'Glade',
-  'Hush', 'Warren', 'Shelf', 'Rill', 'Bower', 'Cove', 'Nest', 'Hearth'];
-const CAVE_ENDS = ['Cave', 'Hollow', 'Dell', 'Grotto'];
+const CAVE_NOUNS = ['Bend', 'Hill', 'Rest', 'Nook', 'Burrow', 'Creek', 'Pocket', 'Glade',
+  'Hush', 'Meadow', 'Shelf', 'Brook', 'Corner', 'Cove', 'Nest', 'Ember'];
+// the word a second grader knows for the place itself - no dell/grotto/bower
+const CAVE_ENDS = ['Cave', 'Den', 'Cavern', 'Hollow'];
 // 16x16x4 = 1024 names from three independent bit fields of one well-mixed hash
 const keyHash = (key) => {
   let h = 2166136261;
@@ -3732,8 +3795,11 @@ function caveGround(x, z) {
   const R = caveRoom.rot || 0, c = Math.cos(R), s = Math.sin(R);
   const dx = x - caveRoom.vault.x, dz = z - caveRoom.vault.z;
   const lx = dx * c - dz * s, lz = dx * s + dz * c;
+  // the vault's props are authored 46 m north of the room centre (dv.position.z),
+  // so the ledge rect is tested in that same authored frame — without this the
+  // ground stayed flat while the stone steps rose 4.2 m and she walked into them
   const L = caveRoom.ledge;
-  if (L && lx > L.x0 && lx < L.x1 && lz > L.z0 && lz < L.z1) return Math.min(L.h, ((lx - L.x0) / (L.x1 - L.x0)) * L.h);
+  if (L && lx > L.x0 && lx < L.x1 && lz - 46 > L.z0 && lz - 46 < L.z1) return ledgeY(lx);
   const S = caveRoom.stair;
   if (S && !R && Math.abs(x) < 19) {
     // the neck into the deep room is a ramp, steps drawn on top of it
@@ -4071,10 +4137,11 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
   // the ledge up the east side, and the treasure on it — or, in the caves that
   // keep it, a rock spur that hides the box until she walks around it
   if (K.ledge) {
-    for (let i = 0; i < 6; i++) {
-      const h = ((i + 0.5) / 6) * LEDGE.h;
-      const step = new THREE.Mesh(new THREE.BoxGeometry(2.1, h, LEDGE.z1 - LEDGE.z0), rockMat);
-      step.position.set(LEDGE.x0 + (i + 0.5) * 2.1, h / 2, (LEDGE.z0 + LEDGE.z1) / 2);
+    const w = (LEDGE.x1 - LEDGE.x0) / LEDGE.n;
+    for (let i = 0; i < LEDGE.n; i++) {
+      const h = ((i + 0.5) / LEDGE.n) * LEDGE.h;
+      const step = new THREE.Mesh(new THREE.BoxGeometry(w, h, LEDGE.z1 - LEDGE.z0), rockMat);
+      step.position.set(LEDGE.x0 + (i + 0.5) * w, h / 2, (LEDGE.z0 + LEDGE.z1) / 2);
       dv.add(step);
     }
   }
@@ -4090,7 +4157,7 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
   lid.position.y = 0.3;
   box.position.y = 0.25;
   chest.add(box, lid);
-  chest.position.set(15.6, K.ledge ? LEDGE.h + 0.02 : 0.02, K.nook ? -51.5 : -50);
+  chest.position.set(15.6, K.ledge ? ledgeY(15.6) + 0.02 : 0.02, K.nook ? -51.5 : -50);
   chest.visible = !save.treasure.includes(key);
   dv.add(chest);
   // something up the stairs to walk toward: a gold glow over the box, seen from
@@ -4505,6 +4572,7 @@ const CM = 1.9 / 180;    // cm -> world units for the hand-built critters (GLB d
 const ANIM_DEER = {
   doe: { file: '/models/doe_f.glb', h: 1.85 },     // reshaped: small head, slim neck, narrow chest, heavy rump
   buck: { file: '/models/stag.glb', h: 2.25 },      // to the antler tips
+  rabbit: { file: '/models/rabbit_cc0.glb', h: 0.42, sh: 0.5, map: { Walk: 'Running', Gallop: 'Running', Idle: 'Basic' } },   // Čestmír Dammer, CC0
 };
 for (const P of Object.values(ANIM_DEER)) {
   P.src = null; P.clips = []; P.S = 0.35;
@@ -4520,13 +4588,15 @@ function makeAnimatedDeer(x, z, kind) {
   const P = ANIM_DEER[kind];
   const g = new THREE.Group(), inst = skClone(P.src);
   inst.traverse((o) => { if (o.isMesh) o.material = o.material.clone(); });
+  inst.rotation.y = P.rot || 0;
   g.add(inst);
   g.scale.setScalar(P.S);
   g.position.set(x, 0, z);
   scene.add(g);
   const mix = new THREE.AnimationMixer(inst), A = {};
   for (const n of ['Walk', 'Gallop', 'Idle', 'Idle_Headlow', 'Eating']) {
-    const c = P.clips.find((k) => k.name === n) || P.clips.find((k) => k.name.endsWith('|' + n));
+    const want = (P.map && P.map[n]) || n;
+    const c = P.clips.find((k) => k.name === want) || P.clips.find((k) => k.name.split('|').pop().toLowerCase().endsWith(want.toLowerCase()));
     if (!c) continue;
     A[n === 'Idle_Headlow' ? 'low' : n === 'Eating' ? 'eat' : n.toLowerCase()] = mix.clipAction(c);
   }
@@ -4535,7 +4605,7 @@ function makeAnimatedDeer(x, z, kind) {
   return {
     g, kind, anim: true, A, mix, w: { walk: 0, gallop: 0, idle: 1, eat: 0 },
     K: false, hop: false, legs: [], head: null, neck: null, headBase: 0, neckBase: 0, graze: 0,
-    sh: shadowBlob(1.1), home: new THREE.Vector2(x, z), t: 0, ph: Math.random() * 6,
+    sh: shadowBlob(P.sh || 1.1), home: new THREE.Vector2(x, z), t: 0, ph: Math.random() * 6,
     yaw: 0, spd: 0, flee: 0, idle: Math.random() * 4, gy: 0, trust: 0, fed: 0,
   };
 }
@@ -4707,6 +4777,19 @@ function makeRiggedRabbit(x, z) {
 
 function makeDeer(x, z, kind = 'doe') {
   const K = kind === 'rabbit', buck = kind === 'buck';
+  // the rigged CC-BY rabbit carries its own idle/walk clips, so it rides the
+  // deer animation path; K stays true so it keeps rabbit speed and stays unfed
+  if (K && ANIM_DEER.rabbit.src) {
+    const r = Object.assign(makeAnimatedDeer(x, z, 'rabbit'), { K: true });
+    // asset fur is baseColor 0.18/0.10/0.04 at metalness 0.4 -> a black blob at 48 cm
+    r.g.traverse((o) => {
+      if (!o.isMesh) return;
+      const m = (o.material = o.material.clone()), n = m.name;
+      m.metalness = 0; m.roughness = 0.9;
+      m.color.set(n === 'Fur_white' ? 0xe4d6c0 : n === 'Black' ? 0x2b2521 : 0xffffff);
+    });
+    return r;
+  }
   if (K && rabbitProto.rabbit) return makeRiggedRabbit(x, z);
   if (!K && ANIM_DEER[kind] && ANIM_DEER[kind].src) return makeAnimatedDeer(x, z, kind);
   if (!K && (deerProto.buck || deerProto.doe)) return makeRiggedDeer(x, z, kind);
@@ -5512,7 +5595,11 @@ function tick() {
       sfx.step(surf);
       if (vel > 3.4) burst(new THREE.Vector3(cx, -0.5, cz), 0xd6c8b2, 6, 0.9, 0.22);
     }
-    player.position.y = bridgeY + Math.abs(Math.sin(walk)) * 0.035 * Math.min(1, vel / 4);
+    // ponytail: 8 m/s vertical ease hides the 0.35 m tread lip; a real step-up
+    // animation is the upgrade if it ever reads as sliding
+    player.position.y = inCave
+      ? player.position.y + THREE.MathUtils.clamp(bridgeY - player.position.y, -8 * dt, 8 * dt)
+      : bridgeY + Math.abs(Math.sin(walk)) * 0.035 * Math.min(1, vel / 4);
   } else {
     vel = 0;
     turnRate *= 0.85;
@@ -5541,8 +5628,8 @@ function tick() {
     arms[1].rotation.x = sw * 0.68;
     arms[0].rotation.z = 0.07 + swingE * 0.05;
     arms[1].rotation.z = -0.07 - swingE * 0.05;
-    elbowT[0] = 0.16 + Math.max(0, -sw) * 0.32;   // the forearm folds on the forward swing
-    elbowT[1] = 0.16 + Math.max(0, sw) * 0.32;
+    elbowT[0] = 0.08 + Math.max(0, -sw) * 0.32;   // the forearm folds on the forward swing
+    elbowT[1] = 0.08 + Math.max(0, sw) * 0.32;
   }
   // hands: the rod, the thrown stone and the oars all drive the same arm bones
   if (throwT > 0) throwT = Math.max(0, throwT - dt);
@@ -5824,10 +5911,13 @@ function tick() {
     ensureFriends(player.position.x, player.position.z);
     // only spawn once both rigs have landed: the hand-built stand-in used to
     // appear before the GLBs finished and then stayed as a boxy deer forever
-    if (deer.length < 2 && ANIM_DEER.doe.src && ANIM_DEER.buck.src && Math.random() < 0.3) {
+    // the big rabbit GLB lands after the deer, and the two slots never refill -- so the
+    // roll has to wait for every species or rabbits never make it in
+    if (deer.length < 2 && Object.values(ANIM_DEER).every((P) => P.src) && Math.random() < 0.3) {
       const a = Math.random() * Math.PI * 2, d = 32 + Math.random() * 34;
-      const r = Math.random();
-      deer.push(makeDeer(player.position.x + Math.cos(a) * d, player.position.z + Math.sin(a) * d, r < 0.2 ? 'rabbit' : r < 0.64 ? 'buck' : 'doe'));
+      // a rabbit turns up as often as either deer kind, and every slot rolls its own spot
+      const kind = ANIM_DEER.rabbit.src ? ['rabbit', 'buck', 'doe'][(Math.random() * 3) | 0] : Math.random() < 0.44 ? 'buck' : 'doe';
+      deer.push(makeDeer(player.position.x + Math.cos(a) * d, player.position.z + Math.sin(a) * d, kind));
     }
     if (birds.length < 2 && Math.random() < 0.35) makeFlock();
     maybeGift();
@@ -6015,8 +6105,8 @@ if ('serviceWorker' in navigator) {
     .catch(() => {});
 }
 
-// ponytail: test hook, only read by the headless harness
-window.__w = {
+// ponytail: test hook, only read by the headless harness (?debug)
+if (DBG) window.__w = {
   pushOut, save, scene, camera,
   rim: (on) => { let c = 0; scene.traverse((o) => { const mm = o.material; if (mm && mm.isMeshToonMaterial) { mm.userData.rim = on; mm.needsUpdate = true; c++; } }); return c; },
   dump: () => { const out = []; player.traverse((o) => out.push({ n: o.name || o.type, m: o.material ? (o.material.type + (o.material.isMeshToonMaterial ? '/toon' : '')) : '-', v: o.visible, s: +o.scale.x.toFixed(2), k: o.userData.outline ? 'hull' : '' })); return out; },
@@ -6160,6 +6250,7 @@ window.__w = {
     const u = fluffy.userData;
     return { cat: w(fluffy), tip: u.tail.length ? w(u.tail[u.tail.length - 1]) : null, legs: u.legs.length, bones: !!u.bones }; },
   tail: () => ({ a: +tailA.toFixed(2) }),
+  stones: () => [...landmarks.values()].map((l) => [+l.x.toFixed(1), +l.z.toFixed(1), l.done, l.key]),
   camps: () => camps.map((c) => ({ i: c.i, x: +c.x.toFixed(1), z: +c.z.toFixed(1), kids: c.g.children.length, props: ((save.camps[c.i] || {}).props || []).length })),
   deco: (i = 0) => { const c = camps[i]; if (!c) return -1; decorateCamp(c); return ((save.camps[c.i] || {}).props || []).length; },
   pack: (i = 0) => { const c = camps[i]; if (!c) return -1; packCamp(c); return camps.length; },
@@ -6274,6 +6365,8 @@ window.__w = {
   caveNames: () => [...caves.values()].map((c) => [c.key, caveName(c)]),
   pushAt: (x, z) => pushOut(x, z),
   caveOff: (v = false) => { if (caveRoom) caveRoom.g.visible = !v; return true; },
+  caveTp: (x, z) => { player.position.set(x, caveGround(x, z), z); return __w.where(); },
+  caveRoomInfo: () => (caveRoom ? { rot: caveRoom.rot, vault: caveRoom.vault, ledge: caveRoom.ledge, stair: caveRoom.stair, kind: caveRoom.kind } : null),
   caveMask: (hide = []) => { const k = new Set(hide); caveRoom.g.children.forEach((o, i) => { o.visible = !k.has(i); }); return caveRoom.g.children.length; },
   caveInfo: () => caveRoom.g.children.map((o, i) => [i, o.type, o.position.toArray().map((n) => +n.toFixed(1)), o.scale.toArray().map((n) => +n.toFixed(1))]),
   caveKids: () => caveScene.children.map((o) => [o.type, o.position.toArray().map((n) => +n.toFixed(1)), o.visible]),

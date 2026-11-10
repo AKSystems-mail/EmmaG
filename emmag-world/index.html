@@ -93,7 +93,11 @@
 
 #obj { font-size:12px; letter-spacing:.02em; opacity:.75; margin-top:4px; max-width:230px; pointer-events:auto; cursor:pointer; }
 #obj b { color:#f2a0c8; font-weight:600; }
+#objrow { display:flex; align-items:center; gap:9px; margin-top:4px; pointer-events:auto; }
+#objrow #obj { margin-top:0; }
 #book, #camp { padding:7px 13px; font:800 12px system-ui; }
+#objsw { padding:5px 11px; font:800 11px system-ui; }
+#objsw[hidden] { display:none; }
 #vig { position:fixed; inset:0; pointer-events:none; background:radial-gradient(ellipse at 50% 55%, rgba(0,0,0,0) 50%, rgba(4,8,20,.42) 100%); }
 #map {
   position:fixed; top:calc(52px + env(safe-area-inset-top)); right:calc(10px + env(safe-area-inset-right));
@@ -216,7 +220,7 @@ body.photo #shot { display:block; }
 
 <div id="hud">
   <div class="title">Emma Grace's Adventures 2</div>
-  <div id="obj">Looking around…</div>
+  <div id="objrow"><div id="obj">Looking around…</div><button id="objsw" hidden>Switch</button></div>
   <div id="res"></div>
 </div>
 <div id="topbtns">
@@ -303,7 +307,7 @@ body.photo #shot { display:block; }
     <button id="install" hidden>Install app</button>
     <div class="hintline">Best in landscape · drag to look · stick to walk</div>
     <div class="hintline" style="margin-top:10px;opacity:.5;font-size:11px">
-      Trees, rocks, dock, path, grass &amp; flowers by Quaternius (CC0) · Rock flat by Kenney (CC0) · Cave scene by Brandon Jones (Toji) · Vines by Poly by Google (CC-BY) · Twine by Jakob Hippe
+      Trees, rocks, dock, path, grass &amp; flowers by Quaternius (CC0) · Rock flat by Kenney (CC0) · Cave scene by Brandon Jones (Toji) · Vines &amp; hibiscus by Poly by Google (CC-BY) · Crystal rock by Cheryl Fong (CC-BY) · Twine by Jakob Hippe · Rabbit by Čestmír Dammer (CC0)
     </div>
   </div>
 </div>
