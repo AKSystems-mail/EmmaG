@@ -39,7 +39,7 @@ if (!save.gates.length) save.gates.push(regionKey(save.x, save.z));
 save.friends ||= []; save.camps ||= []; save.fireflies ||= false;
 save.journal ||= []; save.badges ||= []; save.catches ||= []; save.notes ||= [];
 save.garden ||= []; save.gifts ||= 0; save.names ||= {}; save.postcards ||= [];
-save.caves ||= []; save.treasure ||= [];
+save.caves ||= []; save.treasure ||= []; save.caches ||= [];
   save.mathLvl ||= 0; save.mStreak ||= 0; save.quests ||= {}; save.giant ||= false; save.giantN ||= 0; save.decor ||= [];
 save.crossed ||= 0; save.bestSkip ||= 0; save.boat ||= false;
 save.painting ||= ''; save.giftDay ||= '';
@@ -2154,7 +2154,7 @@ function paintMap(ctx, S, RANGE, big = false) {
       const [dx, dz] = at(c.x, c.z);
       if (Math.hypot(dx - C, dz - C) < C - 30) {
         // one name per spot: overlapping labels turned into a smudge
-        const nm = caveName(c);
+        const nm = save.caves.includes(c.key) ? caveName(c) : '? ? ?';
         ctx.font = '600 19px ui-rounded, system-ui, sans-serif';
         const w = ctx.measureText(nm).width;
         if (labels.some((l) => Math.abs(l[0] - dx) < (w + l[2]) * 0.5 + 4 && Math.abs(l[1] - dz) < 22)) continue;
@@ -2224,6 +2224,7 @@ function paintCave(ctx, S, big) {
   const P = (x, z) => [C + x * k, C + z * k];
   ctx.clearRect(0, 0, S, S);
   for (const r of caveRoom.rooms) {
+    if (r === caveRoom.vault) continue;   // it is a secret: no outline, no ledge, no door
     const [x, z] = P(r.x, r.z);
     ctx.beginPath(); ctx.ellipse(x, z, r.rx * k, r.rz * k, 0, 0, 7);
     ctx.fillStyle = 'rgba(38,30,60,.92)'; ctx.fill();
@@ -2232,10 +2233,6 @@ function paintCave(ctx, S, big) {
   const L = caveRoom.lake, [lx, lz] = P(L.x, L.z);
   ctx.beginPath(); ctx.arc(lx, lz, L.r * k, 0, 7);
   ctx.fillStyle = 'rgba(78,148,198,.72)'; ctx.fill();
-  if (caveRoom.ledge && !caveRoom.rot) {
-    const [ax, az] = P(LEDGE.x0, LEDGE.z0), [bx, bz] = P(LEDGE.x1, LEDGE.z1);
-    ctx.fillStyle = 'rgba(126,110,168,.5)'; ctx.fillRect(ax, az, bx - ax, bz - az);
-  }
   if (caveRoom.stair) {
     // the way down, drawn as the ramp it is
     const [sx, sz] = P(0, STAIR.z1), [ex, ez] = P(0, STAIR.z0);
@@ -2243,6 +2240,7 @@ function paintCave(ctx, S, big) {
     ctx.beginPath(); ctx.moveTo(sx, sz); ctx.lineTo(ex, ez); ctx.stroke();
   }
   for (const d of caveRoom.doors) {
+    if (!d.open && d.room === caveRoom.vault) continue;   // found it first, then it shows
     const [x, z] = P(d.x, d.z);
     ctx.beginPath();
     if (d.axis === 'x') ctx.rect(x - 1.5, z - d.hl * k, 3, d.hl * 2 * k);
@@ -2709,7 +2707,7 @@ function updateObjective() {
   if (inCave) {
     if (sw) sw.hidden = true;
     const open = caveRoom ? caveRoom.doors.filter((d) => d.open).length : 0;
-    el.innerHTML = `Crystals <b>${caveFound}/3</b> · doors <b>${open}/3</b>`;
+    el.innerHTML = `Crystals <b>${caveFound}/3</b> · doors <b>${open}/${caveRoom ? caveRoom.doors.length : 3}</b>`;
     return;
   }
   objList = objectives();
@@ -3882,7 +3880,7 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
     const wide = (r) => Math.sqrt(Math.max(0.04, 1 - (ax ? (d.z - r.z) / r.rz : (d.x - r.x) / r.rx) ** 2));
     const hF = ax ? HALL.x + dir * HALL.rx * wide(HALL) : HALL.z + dir * HALL.rz * wide(HALL);
     const rF = ax ? room.x - dir * room.rx * wide(room) : room.z - dir * room.rz * wide(room);
-    return { ...d, [ax ? 'x' : 'z']: Math.round((hF + rF) * 5) / 10,   // midpoint, 0.1 m
+    return { ...d, room, [ax ? 'x' : 'z']: Math.round((hF + rF) * 5) / 10,   // midpoint, 0.1 m
       n0: Math.min(hF, rF), n1: Math.max(hF, rF),                       // where both floors stop
       gap: (rF - hF) * dir };                                           // >0 = bare neck, <0 = rooms overlap
   });
@@ -3891,6 +3889,13 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
   const rot = vault.x > HALL.x + 2 ? -Math.PI / 2 : vault.x < HALL.x - 2 ? Math.PI / 2 : 0;
   const cR = Math.cos(rot), sR = Math.sin(rot);
   const W = (lx, lz) => [vault.x + lx * cR + lz * sR, vault.z - lx * sR + lz * cR];
+  // where the box will stand has to be known before the walls go up, so the wall rocks can
+  // keep off it: a rock leaning over the box leaves it visible and yet out of reach, since
+  // the box asks from 2.0 m while a rock face stops her 3-4 m away
+  const effX = rot ? vault.rz : vault.rx, effZ = rot ? vault.rx : vault.rz;
+  const cxl = Math.round(effX * 0.72 * 10) / 10;
+  const czl = -Math.round(effZ * 0.25 * 10) / 10 - (K.nook ? 1.5 : 0);
+  const [chX, chZ] = W(cxl, czl);
   const rnd = mulberry(hash2(num, 7, save.seed));
   const g = new THREE.Group();
   const rockMat = new THREE.MeshStandardMaterial({ color: K.rock, emissive: 0x2b2620, roughness: 1, flatShading: true });
@@ -3938,11 +3943,13 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + rnd() * 0.2;
       const x = r.x + Math.cos(a) * r.rx * 0.96, z = r.z + Math.sin(a) * r.rz * 0.96;
+      const rr0 = 2.3 + rnd() * 1.9;   // drawn here so the pocket check can use its size
       if (CAVE_ROOMS.some((o) => o !== r && inRoom(o, x, z, 4))) continue;
       if (CAVE_DOORS.some((d) => Math.hypot(x - d.x, z - d.z) < d.hw + 5.6)) continue;
       if (Math.hypot(x - mouth.x, z - mouth.z) < 8) continue;
       if (K.stair && Math.abs(x) < 9 && z < STAIR.z1 + 5) continue;   // keep the stairway clear
-      const rr0 = 2.3 + rnd() * 1.9;
+      // no rock may lean into the box's pocket: its own collider plus her reach and a step
+      if (Math.hypot(x - chX, z - chZ) < rr0 * 0.88 + 2.2) continue;
       const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(rr0, 0), rockMat);
       rock.position.set(x, ry + 0.5 + rnd() * 1.6, z);
       rock.scale.set(1, 1.7 + rnd() * 1.8, 1);
@@ -3962,6 +3969,7 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
       // the stairway and the doorways stay clear
       if (r === deepRoom && K.stair && Math.abs(st.position.x) < 6) continue;
       if (CAVE_DOORS.some((d) => Math.hypot(st.position.x - d.x, st.position.z - d.z) < d.hw + 4)) continue;
+      if (Math.hypot(st.position.x - chX, st.position.z - chZ) < sr0 * 0.92 + 2.2) continue;
       g.add(st);
       solids.push({ x: st.position.x, z: st.position.z, r: sr0 * 0.92 });
     }
@@ -4203,10 +4211,14 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
     }
   }
   if (K.nook) {
-    const spur = new THREE.Mesh(new THREE.BoxGeometry(3.2, 7.4, 10), rockMat);
-    spur.position.set(10.4, 3.4, -51.5);
+    // authored 10.4 east / -51.5 north / 10 long in a 20 x 16 vault, as fractions: 0.52,
+    // -0.34 and 0.625. unscaled, a turned 19 x 15 vault put the spur straight through the
+    // box, so the box could never be reached (best approach 2.9 m, pickup is closer)
+    const sx0 = effX * 0.52, sz0 = -46 - effZ * 0.34375;
+    const spur = new THREE.Mesh(new THREE.BoxGeometry(3.2, 7.4, effZ * 0.625), rockMat);
+    spur.position.set(sx0, 3.4, sz0);
     dv.add(spur);
-    for (const z of [-47.4, -51.5, -55.6]) { const [sx, sz] = W(10.4, z + 46); solids.push({ x: sx, z: sz, r: 2.1 }); }
+    for (const f of [0.0875, 0.34375, 0.6]) { const [sx, sz] = W(sx0, -46 - effZ * f); solids.push({ x: sx, z: sz, r: 2.1 }); }
   }
   const chest = new THREE.Group();
   const box = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.5), new THREE.MeshStandardMaterial({ color: 0xc8a24a, metalness: 0.4, roughness: 0.5, flatShading: true }));
@@ -4214,7 +4226,8 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
   lid.position.y = 0.3;
   box.position.y = 0.25;
   chest.add(box, lid);
-  chest.position.set(15.6, K.ledge ? ledgeY(15.6) + 0.02 : 0.02, K.nook ? -51.5 : -50);
+  // cxl / czl are worked out above the wall build, so the rocks could keep off the pocket
+  chest.position.set(cxl, K.ledge ? ledgeY(cxl) + 0.02 : 0.02, czl - 46);
   chest.visible = !save.treasure.includes(key);
   dv.add(chest);
   // something up the stairs to walk toward: a gold glow over the box, seen from
@@ -4237,6 +4250,8 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
 
   // three crystals, scattered anywhere on the hall floor
   const crystals = [];
+  const crowded = (x, z, m) => solids.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + m)
+    || (pond && Math.hypot(pond.x - x, pond.z - z) < pond.r + m);
   const crystalSpot = () => {
     for (let i = 0; i < 40; i++) {
       const x = HALL.x + (rnd() * 2 - 1) * (HALL.rx - 4);
@@ -4248,12 +4263,25 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
       // pushes her 2-5 m out and the pickup reach is 1.4 m, so a crystal inside one could
       // never be lit. pushOut cannot answer yet, the room only becomes live after this
       // build returns, so read the same collider list directly
-      if (solids.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + 1.7)) continue;
-      if (pond && Math.hypot(pond.x - x, pond.z - z) < pond.r + 1.7) continue;
-      if (crystals.some((c) => Math.hypot(c.x - x, c.z - z) < 9)) continue;
+      if (crowded(x, z, 1.7)) continue;
       return { x, z };
     }
-    return { x: HALL.x, z: HALL.z };                                  // ponytail: 40 darts never missed; keeps the run finite
+    // the darts can miss on a rock-heavy roll. scan the hall instead of dropping the
+    // crystal on the centre: a fallback there buried it in a rock or stacked it on the
+    // last one, and the door needs all three lit. Spacing is 4 m, so this always lands
+    const spot = [];
+    for (let x = HALL.x - HALL.rx + 5; x < HALL.x + HALL.rx - 4; x += 4)
+      for (let z = HALL.z - HALL.rz + 7; z < HALL.z + HALL.rz - 6; z += 4) {
+        if (((x - HALL.x) / (HALL.rx - 3)) ** 2 + ((z - HALL.z) / (HALL.rz - 3)) ** 2 > 1) continue;
+        if (z > mouth.z - 10) continue;
+        if (CAVE_DOORS.some((d) => Math.hypot(x - d.x, z - d.z) < 8)) continue;
+        if (crowded(x, z, 1.2) || crystals.some((c) => Math.hypot(c.x - x, c.z - z) < 8)) continue;
+        spot.push([x, z]);
+      }
+    // farthest from the ones already down, so three never bunch up
+    spot.sort((a, b) => Math.min(...crystals.map((c) => Math.hypot(c.x - b[0], c.z - b[1])))
+      - Math.min(...crystals.map((c) => Math.hypot(c.x - a[0], c.z - a[1]))));
+    return spot[0] ? { x: spot[0][0], z: spot[0][1] } : { x: HALL.x, z: HALL.z };
   };
   for (let i = 0; i < 3; i++) {
     const { x, z } = crystalSpot();
@@ -4376,6 +4404,41 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
     }
   }
 
+  // a dry side room holds one cache: a wrapped bundle on a little cairn, once per room
+  // per cave. The hall and the vault are left alone — the hall is a corridor and the
+  // vault already has the box
+  const caches = [];
+  for (let i = 1; i < CAVE_ROOMS.length; i++) {
+    const r = CAVE_ROOMS[i];
+    if (r === vault) continue;
+    if (pond && Math.hypot(r.x - pond.x, r.z - pond.z) < pond.r + 8) continue;   // the room with water keeps its pool
+    const spots = [[r.x, r.z], [r.x, r.z + 3], [r.x + 3, r.z], [r.x, r.z - 3]];
+    const sp = spots.find(([x, z]) => !solids.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + 1.6));
+    if (!sp) continue;
+    const ck = `${key}:${i}`;
+    const cg = new THREE.Group();
+    for (let k2 = 0; k2 < 3; k2++) {
+      const st = new THREE.Mesh(new THREE.DodecahedronGeometry(0.34 - k2 * 0.05, 0), rockMat);
+      st.position.set((k2 - 1) * 0.16, 0.2 + k2 * 0.28, (k2 % 2) * 0.1);
+      st.scale.y = 0.72;
+      cg.add(st);
+    }
+    const bundle = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.4, 0.44),
+      new THREE.MeshStandardMaterial({ color: 0xb0703c, emissive: 0x2a160a, roughness: 0.9, flatShading: true }));
+    bundle.position.y = 1.14; bundle.rotation.y = 0.4;
+    cg.add(bundle);
+    // a warm spot so a dark room still shows it from the doorway
+    const cgl = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTex, color: 0xffcf8a, transparent: true,
+      opacity: 0.42, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    cgl.scale.set(2.2, 2.2, 1); cgl.position.y = 1.3;
+    cg.add(cgl);
+    const cgot = save.caches.includes(ck);
+    cg.position.set(sp[0], 0, sp[1]);
+    cg.visible = !cgot;
+    g.add(cg);
+    caches.push({ g: cg, x: sp[0], z: sp[1], key: ck, got: cgot });
+  }
+
   const worms = caveWormDots(g);
   const moss = [];
   for (let i = 0; i < K.moss; i++) {
@@ -4389,7 +4452,7 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
   caveScene.add(g);
   caveKey = key;
   caveRoom = {
-    g, rooms: CAVE_ROOMS, crystals, chest, doors, bats, moss, mouth, solids, kind: K.id, floorY: y0,
+    g, rooms: CAVE_ROOMS, crystals, chest, doors, bats, moss, mouth, solids, caches, kind: K.id, floorY: y0,
     vault, rot, vaultG: dv, glow: K.glow !== 0,
     ledge: K.ledge ? LEDGE : null, stair: K.stair ? STAIR : null,
     arch: { g: arch, door: glowM, light: glowL },
@@ -4508,6 +4571,18 @@ function caveTick(dt, t) {
         toast('Three lights are lit — the back wall is waiting for an answer');
       }
     }
+  }
+
+  // a cache gives once, then the room is quiet
+  for (const c of caveRoom.caches) {
+    if (c.got || caveT < 0.4) continue;
+    if (py > 2.5 || Math.hypot(c.x - px, c.z - pz) > 1.8) continue;
+    c.got = true; c.g.visible = false;
+    save.caches.push(c.key);
+    save.res.stone += 6; save.res.bloom += 4;
+    burst(new THREE.Vector3(c.x, 0.9, c.z), 0xd9c7a0, 16, 2);
+    toast('A little cache of stone and bloom 🪨 +6  🌸 +4');
+    sfx.gather(2); hud(); persist();
   }
 
   // a door does its thing when she walks up to it
@@ -6399,6 +6474,7 @@ if (DBG) window.__w = {
   chest: () => (caveRoom ? {
     x: +caveRoom.chest.position.x.toFixed(1), z: +caveRoom.chest.position.z.toFixed(1),
     vis: caveRoom.chest.visible, shine: caveRoom.shine.visible, taken: save.treasure.includes(caveKey),
+    w: ((v) => [+v.x.toFixed(1), +v.z.toFixed(1)])(caveRoom.chest.getWorldPosition(camera.position.clone())),
   } : null),
   // generator check: no stream down a bridge, no cave in a pond
   audit: (n = 30) => {
@@ -6437,7 +6513,7 @@ if (DBG) window.__w = {
   dupIds: () => { const s = new Set(); let d = 0; for (const c of chunks.values()) for (const p of c.nodes) { if (s.has(p.id)) d++; else s.add(p.id); } return d; },
   caveOff: (v = false) => { if (caveRoom) caveRoom.g.visible = !v; return true; },
   caveTp: (x, z) => { player.position.set(x, caveGround(x, z), z); return __w.where(); },
-  caveRoomInfo: () => (caveRoom ? { rot: caveRoom.rot, vault: caveRoom.vault, ledge: caveRoom.ledge, stair: caveRoom.stair, kind: caveRoom.kind, doors: caveRoom.doors.map((d) => [d.id, d.x, d.z, d.axis, d.open]) } : null),
+  caveRoomInfo: () => (caveRoom ? { rot: caveRoom.rot, vault: caveRoom.vault, ledge: caveRoom.ledge, stair: caveRoom.stair, kind: caveRoom.kind, doors: caveRoom.doors.map((d) => [d.id, d.x, d.z, d.axis, d.open]), caches: caveRoom.caches.map((c) => [c.x, c.z, c.got]) } : null),
   caveMask: (hide = []) => { const k = new Set(hide); caveRoom.g.children.forEach((o, i) => { o.visible = !k.has(i); }); return caveRoom.g.children.length; },
   caveInfo: () => caveRoom.g.children.map((o, i) => [i, o.type, o.position.toArray().map((n) => +n.toFixed(1)), o.scale.toArray().map((n) => +n.toFixed(1))]),
   caveKids: () => caveScene.children.map((o) => [o.type, o.position.toArray().map((n) => +n.toFixed(1)), o.visible]),
