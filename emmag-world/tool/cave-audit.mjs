@@ -82,7 +82,8 @@ for (const key of KEYS) {
   await sleep(400);
   if (!(await ev(`document.querySelector('#gate').className.includes('on')`))) bad(tag, 'standing on the gift does not open it');
 
-  // caches: walkable to
+  // caches: walkable to, and exactly one per cave — one bundle is the whole point
+  if (info.caches.length !== 1) bad(tag, `${info.caches.length} caches, want exactly 1`);
   for (const [x, z] of info.caches) {
     const r = await ev(reachFn(x, z));
     if (r > REACH) bad(tag, `cache at ${x},${z} unreachable, closest ${r} m`);

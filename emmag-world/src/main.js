@@ -4425,14 +4425,19 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
     }
   }
 
-  // a dry side room holds one cache: a wrapped bundle on a little cairn, once per room
-  // per cave. The hall and the vault are left alone — the hall is a corridor and the
-  // vault already has the box
+  // one cache per cave, not one per room: a wrapped bundle on a little cairn in a
+  // single dry side room, picked from the cave's own key so caves differ. The hall
+  // is a corridor and the vault already has the chest, so both are left alone
   const caches = [];
+  const dry = [];
   for (let i = 1; i < CAVE_ROOMS.length; i++) {
     const r = CAVE_ROOMS[i];
     if (r === vault) continue;
     if (pond && Math.hypot(r.x - pond.x, r.z - pond.z) < pond.r + 8) continue;   // the room with water keeps its pool
+    dry.push(i);
+  }
+  for (const i of dry.length ? [dry[keyNum(key) % dry.length]] : []) {
+    const r = CAVE_ROOMS[i];
     const spots = [[r.x, r.z], [r.x, r.z + 3], [r.x + 3, r.z], [r.x, r.z - 3]];
     const sp = spots.find(([x, z]) => !solids.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + 1.6));
     if (!sp) continue;
