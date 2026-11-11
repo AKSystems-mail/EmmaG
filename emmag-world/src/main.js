@@ -1729,7 +1729,14 @@ function pondFor(rx, rz) {
   // sometimes far enough that the lake spills over the boundary
   const ang = rnd() * Math.PI * 2, dist = rnd() < 0.35 ? r + 34 + rnd() * 26 : r + 8 + rnd() * 16;
   const [x, z] = warp(s.x + Math.cos(ang) * dist, s.z + Math.sin(ang) * dist);
-  return { x, z, r, arch: 1.3 + r * 0.035, axis: rnd() < 0.5 ? 0 : 1, key: `${rx},${rz}` };
+  // a pond is flat water. Bowled over a hill it is a slope the deer run up, the
+  // boat sails through and she cannot reach -- so the water gives way, not the hill
+  if (inHill(x, z, r * 0.85)) return null;
+  // three flavours, never both crossings: some get the deck, some the pier and
+  // the boat, some neither and you walk round
+  const roll = rnd();
+  const kind = roll < 0.42 ? 'bridge' : roll < 0.71 ? 'boat' : 'none';
+  return { x, z, r, arch: 1.3 + r * 0.035, axis: rnd() < 0.5 ? 0 : 1, kind, wet: rnd() < 0.68, key: `${rx},${rz}` };
 }
 
 // where the pond drains: away from its stone, but never down the line of the
@@ -1790,6 +1797,7 @@ function makePond(pd) {
 
   // the deck arches: 0.5 at each bank, arch above that at the crown
   const A = pd.arch || 2, half = pd.r + 3, deck = (x) => 0.5 + A * (1 - (x / half) ** 2);
+  if (pd.kind === 'bridge') {
   // the deck runs past the arch until it reaches the ground: solve deck(xEnd) = 0
   const xEnd = half * Math.sqrt(1 + 0.5 / A);
   for (let i = -Math.ceil(xEnd / 1.1); i <= Math.ceil(xEnd / 1.1); i++) {
@@ -1818,6 +1826,7 @@ function makePond(pd) {
       }
       prev = { x, y: y + 0.62 };
     }
+  }
   }
   if (pd.axis) g.rotation.y = Math.PI / 2;
   pondExtras(pd);
@@ -1880,6 +1889,7 @@ function groundAt(x, z) {
   return Math.max(y, hillAt(x, z));
 }
 const onBridge = (pd, x, z) => {
+  if (pd.kind !== 'bridge') return 0;
   const dx = x - pd.x, dz = z - pd.z;
   const along = pd.axis ? dz : dx;
   const across = pd.axis ? dx : dz;
@@ -3237,6 +3247,7 @@ function pondExtras(pd) {
   const [ux, uz] = streamDir(pd), nx = -uz, nz = ux;
   const dl = 7.6, d0 = pd.r * 0.8;
   const an = Math.atan2(ux, uz) + Math.PI / 4;
+  if (pd.kind === 'boat') {
   const ddx = Math.sin(an), ddz = Math.cos(an);
   pd.dock = { x: pd.x, z: pd.z, dx: ddx, dz: ddz, nx: -ddz, nz: ddx, a: d0, b: d0 + dl };
   const dockG = new THREE.Group();
@@ -3245,6 +3256,7 @@ function pondExtras(pd) {
   if (dockGeo) dockG.add(dockPiece(slot.z));
   else dockWait.push(slot);
   g.add(dockG);
+  }
 
   // reeds at the waterline, wildflowers a step back on the bank
   for (let i = 0; i < 18; i++) {
@@ -3261,7 +3273,7 @@ function pondExtras(pd) {
   // the run stops short of the next pond, so the fall never lands in one
   const b0 = streamB0(pd, ux, uz);
   const a0 = pd.r * 0.7, len = b0 - a0;
-  if (len > 8) {
+  if (pd.wet && len > 8) {
   const mk = (geo, material, along, across, y) => {
     const m = new THREE.Mesh(geo, material);
     m.position.set(pd.x + ux * along + nx * across, y, pd.z + uz * along + nz * across);
@@ -3316,7 +3328,7 @@ function pondExtras(pd) {
   }   // len > 8
 
   // a rowboat, moored at the edge
-  {
+  if (pd.kind === 'boat') {
     const b = new THREE.Group();
     const plan = (k) => {
       const s = new THREE.Shape();
@@ -5182,8 +5194,14 @@ function lifeTick(dt, t) {
     if (d.spd > 0.03 && !d.wip) {
       const ax = tx - d.g.position.x, az = tz - d.g.position.z;
       const am = Math.hypot(ax, az) || 1;
-      d.g.position.x += (ax / am) * d.spd * dt;
-      d.g.position.z += (az / am) * d.spd * dt;
+      const nx = d.g.position.x + (ax / am) * d.spd * dt;
+      const nz = d.g.position.z + (az / am) * d.spd * dt;
+      // deer hold the bank. If they are somehow already out there, let them walk
+      // back in rather than freeze mid-lake
+      if (inWater(d.g.position.x, d.g.position.z, 1.0) || !inWater(nx, nz, 1.0)) {
+        d.g.position.x = nx;
+        d.g.position.z = nz;
+      }
       const tgt = Math.atan2(ax, az);
       d.yaw += (((tgt - d.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI) * Math.min(1, dt * 5);
       d.g.rotation.y = d.yaw;
@@ -6513,7 +6531,7 @@ if (DBG) window.__w = {
   },
   g: (x, z) => +groundAt(x, z).toFixed(3),
   by: () => ({ by: +bridgeY.toFixed(3), g: +groundAt(player.position.x, player.position.z).toFixed(3), boat: inBoat, riding, y: +player.position.y.toFixed(3) }),
-  ponds: () => [...ponds.values()].map((p) => ({ x: +p.x.toFixed(1), z: +p.z.toFixed(1), r: +p.r.toFixed(1), axis: p.axis, arch: p.arch, stones: (p.stones || []).map((s) => [+s.x.toFixed(1), +s.z.toFixed(1)]) })),
+  ponds: () => [...ponds.values()].map((p) => ({ x: +p.x.toFixed(1), z: +p.z.toFixed(1), r: +p.r.toFixed(1), axis: p.axis, kind: p.kind, wet: !!p.wet, arch: p.arch, stones: (p.stones || []).map((s) => [+s.x.toFixed(1), +s.z.toFixed(1)]) })),
   where: () => ({ inCave, inBoat, x: +player.position.x.toFixed(1), y: +player.position.y.toFixed(2), z: +player.position.z.toFixed(1) }),
   teleportMenu: () => { openTeleport(); return $('#tplist').textContent; },
   rideTo: (i = 0) => { const c = camps[i]; if (!c) return null; startRide(c); return campName(c); },
