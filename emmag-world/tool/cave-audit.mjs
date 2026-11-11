@@ -82,6 +82,15 @@ for (const key of KEYS) {
   await sleep(400);
   if (!(await ev(`document.querySelector('#gate').className.includes('on')`))) bad(tag, 'standing on the gift does not open it');
 
+  // the map must never mark the vault: the pool used to be a blue dot that pointed
+  // at the room nobody had found yet
+  const wet = J(await ev(`JSON.stringify((() => { const c = document.querySelector('#map');
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0;
+    for (let i = 0; i < d.length; i += 4)
+      if (d[i + 3] > 100 && d[i + 2] - d[i + 1] > 25 && d[i + 1] - d[i] > 25) n++;
+    return n; })())`));
+  if (wet) bad(tag, `${wet} water pixels on the cave map`);
+
   // caches: walkable to, and exactly one per cave — one bundle is the whole point
   if (info.caches.length !== 1) bad(tag, `${info.caches.length} caches, want exactly 1`);
   for (const [x, z] of info.caches) {

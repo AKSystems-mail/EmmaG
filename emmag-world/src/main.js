@@ -2249,9 +2249,6 @@ function paintCave(ctx, S, big) {
     ctx.fillStyle = 'rgba(38,30,60,.92)'; ctx.fill();
     ctx.strokeStyle = 'rgba(177,140,232,.30)'; ctx.lineWidth = big ? 2 : 1.4; ctx.stroke();
   }
-  const L = caveRoom.lake, [lx, lz] = P(L.x, L.z);
-  ctx.beginPath(); ctx.arc(lx, lz, L.r * k, 0, 7);
-  ctx.fillStyle = 'rgba(78,148,198,.72)'; ctx.fill();
   if (caveRoom.stair) {
     // the way down, drawn as the ramp it is
     const [sx, sz] = P(0, STAIR.z1), [ex, ez] = P(0, STAIR.z0);
