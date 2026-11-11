@@ -17,6 +17,15 @@ const SAVE = 'emmaworld.v2';
 const DBG = /[?&]debug\b/.test(location.search) || location.hostname === 'localhost';
 const TYPES = ['wood', 'stone', 'bloom', 'spark'];
 const LABEL = { wood: 'Wood', stone: 'Stone', bloom: 'Bloom', spark: 'Spark' };
+// a cache is not always the same pile: four bundles, picked by the room so the same
+// room always gives the same one and nothing changes under her on a second visit
+const CACHE_KITS = [
+  { stone: 6, bloom: 4, col: 0xb0703c },
+  { wood: 8, stone: 2, col: 0x8a7cc0 },
+  { spark: 2, bloom: 3, col: 0xc0a45c },
+  { wood: 3, stone: 3, bloom: 2, spark: 1, col: 0x7aa88a },
+];
+const cacheKit = (s) => { let h = 7; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) | 0; return CACHE_KITS[Math.abs(h) % CACHE_KITS.length]; };
 const ICON = { wood: 'Wood', stone: 'Stone', bloom: 'Bloom', spark: 'Spark' };
 const GATHER = { tree: 'wood', rock: 'stone', flower: 'bloom', crystal: 'spark' };
 // regrow per resource: wood is slowest, bloom (the child's favourite) fastest
@@ -4423,8 +4432,9 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
       st.scale.y = 0.72;
       cg.add(st);
     }
+    const kit = cacheKit(ck);
     const bundle = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.4, 0.44),
-      new THREE.MeshStandardMaterial({ color: 0xb0703c, emissive: 0x2a160a, roughness: 0.9, flatShading: true }));
+      new THREE.MeshStandardMaterial({ color: kit.col, emissive: 0x2a160a, roughness: 0.9, flatShading: true }));
     bundle.position.y = 1.14; bundle.rotation.y = 0.4;
     cg.add(bundle);
     // a warm spot so a dark room still shows it from the doorway
@@ -4436,7 +4446,7 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
     cg.position.set(sp[0], 0, sp[1]);
     cg.visible = !cgot;
     g.add(cg);
-    caches.push({ g: cg, x: sp[0], z: sp[1], key: ck, got: cgot });
+    caches.push({ g: cg, x: sp[0], z: sp[1], key: ck, got: cgot, kit });
   }
 
   const worms = caveWormDots(g);
@@ -4579,9 +4589,10 @@ function caveTick(dt, t) {
     if (py > 2.5 || Math.hypot(c.x - px, c.z - pz) > 1.8) continue;
     c.got = true; c.g.visible = false;
     save.caches.push(c.key);
-    save.res.stone += 6; save.res.bloom += 4;
+    const got = [];
+    for (const [r2, n] of Object.entries(c.kit)) if (r2 !== 'col') { save.res[r2] += n; got.push(`${n} ${LABEL[r2]}`); }
     burst(new THREE.Vector3(c.x, 0.9, c.z), 0xd9c7a0, 16, 2);
-    toast('A little cache of stone and bloom 🪨 +6  🌸 +4');
+    toast(`A little cache — ${got.join(' · ')} 🎁`);
     sfx.gather(2); hud(); persist();
   }
 
@@ -6513,7 +6524,7 @@ if (DBG) window.__w = {
   dupIds: () => { const s = new Set(); let d = 0; for (const c of chunks.values()) for (const p of c.nodes) { if (s.has(p.id)) d++; else s.add(p.id); } return d; },
   caveOff: (v = false) => { if (caveRoom) caveRoom.g.visible = !v; return true; },
   caveTp: (x, z) => { player.position.set(x, caveGround(x, z), z); return __w.where(); },
-  caveRoomInfo: () => (caveRoom ? { rot: caveRoom.rot, vault: caveRoom.vault, ledge: caveRoom.ledge, stair: caveRoom.stair, kind: caveRoom.kind, doors: caveRoom.doors.map((d) => [d.id, d.x, d.z, d.axis, d.open]), caches: caveRoom.caches.map((c) => [c.x, c.z, c.got]) } : null),
+  caveRoomInfo: () => (caveRoom ? { rot: caveRoom.rot, vault: caveRoom.vault, ledge: caveRoom.ledge, stair: caveRoom.stair, kind: caveRoom.kind, doors: caveRoom.doors.map((d) => [d.id, d.x, d.z, d.axis, d.open]), caches: caveRoom.caches.map((c) => [c.x, c.z, c.got, JSON.stringify(Object.fromEntries(Object.entries(c.kit).filter(([q]) => q !== 'col')))]) } : null),
   caveMask: (hide = []) => { const k = new Set(hide); caveRoom.g.children.forEach((o, i) => { o.visible = !k.has(i); }); return caveRoom.g.children.length; },
   caveInfo: () => caveRoom.g.children.map((o, i) => [i, o.type, o.position.toArray().map((n) => +n.toFixed(1)), o.scale.toArray().map((n) => +n.toFixed(1))]),
   caveKids: () => caveScene.children.map((o) => [o.type, o.position.toArray().map((n) => +n.toFixed(1)), o.visible]),
