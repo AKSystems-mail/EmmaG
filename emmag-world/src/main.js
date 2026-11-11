@@ -4506,7 +4506,13 @@ function enterCave(c) {
     lantern.intensity = 9;
     sfx.setEcho(true);
     for (const d of caveRoom.doors) if (d.open && d.kind === 'crystal') caveBeacon(d);
-    for (const k of caveRoom.crystals) { k.got = false; k.g.visible = true; k.light.intensity = caveRoom.glow ? 1.5 : 0; }
+    // the three lights were spent on the first door they opened: a cave she has
+    // already solved keeps its doors open, so it does not grow the crystals back
+    const lit = caveRoom.doors.some((d) => d.open);
+    if (lit) caveFound = 3;
+    for (const k of caveRoom.crystals) {
+      k.got = lit; k.g.visible = !lit; k.light.intensity = lit ? 0 : (caveRoom.glow ? 1.5 : 0);
+    }
     caveRoom.chest.visible = !save.treasure.includes(caveKey);
     caveRoom.shine.visible = caveRoom.chest.visible;
     updateObjective();

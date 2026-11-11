@@ -113,6 +113,20 @@ for (const key of KEYS) {
     const thru = await ev(reachFn(past[0], past[1]));
     if (thru > 2) bad(tag, `door ${id} open but blocked (closest ${thru} m)`);
   }
+  // a cave she has already solved keeps its doors open and grows no new crystals
+  await ev(`window.__w.caveOut?.()`); await sleep(1400);
+  await ev(`window.__w.caveTest('${key}')`);
+  let back = null;
+  for (let i = 0; i < 40; i++) {
+    await sleep(280);
+    const c = J(await ev(`JSON.stringify(window.__w.cave())`));
+    if (c.in && c.key === key) { back = c; break; }
+  }
+  if (!back) bad(tag, 'cave never rebuilt on the second visit');
+  else {
+    if (!back.crystals.every((k) => k.got)) bad(tag, 'crystals came back after the door was opened');
+    if (!J(await ev(`JSON.stringify(window.__w.caveDoors())`)).some((d) => d.open)) bad(tag, 'the open door closed itself');
+  }
   console.log(`${tag.padEnd(18)} crystals ${crys.length}  gift ${cr} m  caches ${info.caches.length}  doors ${info.doors.length}`);
 }
 
