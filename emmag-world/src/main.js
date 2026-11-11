@@ -1161,7 +1161,7 @@ function burst(pos, hex, n = 14, power = 3, up = 1.5) {
 
 // ---------------------------------------------------------------- inputs
 const input = { x: 0, y: 0 };
-let camYaw = 0, camPitch = 0.30;
+let camYaw = 0, camPitch = 0.52;
 let camDist = 9.6;
 const CAM_MIN = 4, CAM_MAX = 18;
 addEventListener('wheel', (e) => { camDist = clamp(camDist + e.deltaY * 0.012, CAM_MIN, CAM_MAX); }, { passive: true });
