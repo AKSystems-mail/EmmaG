@@ -1757,7 +1757,8 @@ function streamDir(pd) {
 
 // where the stream's run ends: short of the next pond, or short of the giant
 function streamB0(pd, ux, uz) {
-  let b0 = pd.r + 46;
+  // 18-46 m, fixed per pond: an even 46 everywhere made every roadside the same
+  let b0 = pd.r + 18 + (hash2(pd.x, pd.z, 7) / 4294967296) * 28;
   for (const o of ponds.values()) {
     if (o === pd) continue;
     const rx = o.x - pd.x, rz = o.z - pd.z;
