@@ -3228,16 +3228,16 @@ function pondExtras(pd) {
   pd.extra = g;
   scene.add(g);
 
-  // stepping stones: a second crossing, offset from the bridge
+  // stepping stones: a real second crossing, offset off the bridge line. Pads
+  // run the full water line at 2.4 m centres -- they overlap by 0.3 m, so there
+  // is no water between them and she can walk the whole way over
   pd.stones = [];
-  const sx = pd.axis ? 0 : pd.r * 0.55, sz = pd.axis ? pd.r * 0.55 : 0;
-  for (let i = -2; i <= 2; i++) {
-    const t = i * pd.r * 0.42;
-    const x = pd.axis ? pd.x + t : pd.x + sx, z = pd.axis ? pd.z + sz : pd.z + t;
-    const s = { x, z };
-    pd.stones.push(s);
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.15, 0.34, 7), stoneMat);
-    m.position.set(x - pd.x, 0.17, z - pd.z);
+  const off = pd.r * 0.55, half = Math.sqrt(1 - 0.55 ** 2) * pd.r * 0.98;
+  for (let t = -half; t <= half + 0.01; t += 2.4) {
+    const x = pd.axis ? pd.x + t : pd.x + off, z = pd.axis ? pd.z + off : pd.z + t;
+    pd.stones.push({ x, z });
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.45, 0.3, 7), stoneMat);
+    m.position.set(x - pd.x, 0.15, z - pd.z);
     m.receiveShadow = true;
     g.add(m);
   }
@@ -3425,7 +3425,7 @@ function pondExtras(pd) {
 
 function onStones(x, z) {
   for (const pd of ponds.values()) {
-    for (const s of pd.stones || []) if (Math.hypot(x - s.x, z - s.z) < 1.05) return true;
+    for (const s of pd.stones || []) if (Math.hypot(x - s.x, z - s.z) < 1.35) return true;
     for (const s of pd.streamStones || []) if (Math.hypot(x - s.x, z - s.z) < 1.0) return true;
   }
   return false;
