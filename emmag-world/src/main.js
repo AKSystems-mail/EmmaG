@@ -3035,7 +3035,7 @@ function updateNear() {
     actEl.textContent = fishing ? (fishing.phase === 'bite' ? 'Reel!' : 'Wait…') : 'Fish';
   } else if (near.kind === 'skip') {
     promptEl.textContent = 'Flat stone';
-    actEl.textContent = mini ? 'Skip!' : 'Skip stones';
+    actEl.textContent = mini ? 'Skip!' : skipCool() > 0 ? `Rest ${Math.ceil(skipCool())}s` : 'Skip stones';
   } else if (near.kind === 'boat') {
     promptEl.textContent = 'Rowboat';
     actEl.textContent = 'Row';
@@ -5563,8 +5563,12 @@ function landCatch() {
   persist(); hud(); checkBadges();
   return kind;
 }
-let skipStone = null, throwT = 0;
+let skipStone = null, throwT = 0, skipThrows = 0, skipRestUntil = 0;
+const SKIP_REST = 6000;                              // ms on the bank after five throws
+const skipCool = () => Math.max(0, (skipRestUntil - performance.now()) / 1000);
 function startSkips() {
+  if (performance.now() < skipRestUntil) return;     // the arm needs a rest
+  if (++skipThrows % 5 === 0) skipRestUntil = performance.now() + SKIP_REST;
   mini = { x: 0, dir: 1, spd: 1.9 };
   actEl.textContent = 'Skip!';
   $('#mini').hidden = false;
@@ -6356,6 +6360,7 @@ if (DBG) window.__w = {
   fishPhase: () => (fishing ? { p: fishing.phase, t: +fishing.t.toFixed(2), bob: +fishing.bob.y.toFixed(2) } : null),
   reel: () => { if (!fishing) return null; if (fishing.phase === 'bite') { fishing.phase = 'reel'; fishing.t = 0; } return fishing.phase; },
   skip: (acc) => { if (!mini) startSkips(); if (acc !== undefined) { mini.x = 1 - acc; finishSkips(); return true; } return false; },
+  skipTry: (n) => { for (let i = 0; i < n; i++) startSkips(); const open = !!mini; if (mini) { mini = null; $('#mini').hidden = true; } return { throws: skipThrows, cool: +skipCool().toFixed(1), open }; },
   skipAt: () => (skipStone ? { hops: skipStone.hops, y: +skipStone.m.position.y.toFixed(2), acc: +(skipStone.acc || 0).toFixed(2), vy: +skipStone.v.y.toFixed(2) } : null),
   pet: () => { petFluffy(); return +petT.toFixed(2); },
   feed: () => { const dp = (x) => Math.hypot(x.g.position.x - player.position.x, x.g.position.z - player.position.z);
