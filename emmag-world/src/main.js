@@ -1871,13 +1871,12 @@ function ensurePond(rx, rz) {
 // one truth for "how high is the floor here" - player, cat, shadows and foot IK
 function groundAt(x, z) {
   if (inCave) return caveGround(x, z);
+  // highest surface wins, and nothing breaks early: a stone under a bridge used to
+  // win the loop before the deck was looked at, and she dropped onto it mid-plank
   let y = 0;
-  for (const pd of ponds.values()) {
-    const deck = onBridge(pd, x, z);
-    if (deck) { y = deck; break; }
-    if (onDock(x, z)) { y = DOCK_Y; break; }
-    if (onStones(x, z)) { y = 0.3; break; }
-  }
+  for (const pd of ponds.values()) y = Math.max(y, onBridge(pd, x, z));
+  if (onDock(x, z)) y = Math.max(y, DOCK_Y);
+  if (onStones(x, z)) y = Math.max(y, 0.3);
   return Math.max(y, hillAt(x, z));
 }
 const onBridge = (pd, x, z) => {
@@ -6507,6 +6506,9 @@ if (DBG) window.__w = {
     }
     return { ponds: pondsN, caves, badStreams, closestCaveToShore: +closest.toFixed(1), first };
   },
+  g: (x, z) => +groundAt(x, z).toFixed(3),
+  by: () => ({ by: +bridgeY.toFixed(3), g: +groundAt(player.position.x, player.position.z).toFixed(3), boat: inBoat, riding, y: +player.position.y.toFixed(3) }),
+  ponds: () => [...ponds.values()].map((p) => ({ x: +p.x.toFixed(1), z: +p.z.toFixed(1), r: +p.r.toFixed(1), axis: p.axis, arch: p.arch, stones: (p.stones || []).map((s) => [+s.x.toFixed(1), +s.z.toFixed(1)]) })),
   where: () => ({ inCave, inBoat, x: +player.position.x.toFixed(1), y: +player.position.y.toFixed(2), z: +player.position.z.toFixed(1) }),
   teleportMenu: () => { openTeleport(); return $('#tplist').textContent; },
   rideTo: (i = 0) => { const c = camps[i]; if (!c) return null; startRide(c); return campName(c); },
