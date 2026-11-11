@@ -4544,6 +4544,14 @@ function caveTakeTreasure() {
   logJournal('I found something old and golden under the hill.');
 }
 
+const chVec = new THREE.Vector3();
+// the vault is turned to face the hall, so the box's own position is not where it
+// stands: ask the scene graph for the world point, or this only ever fires in the
+// caves whose vault happens not to be rotated
+const chestInReach = (px, py, pz) => {
+  const ch = caveRoom.chest.getWorldPosition(chVec);
+  return !save.treasure.includes(caveKey) && !gate && py > ch.y - 2.2 && Math.hypot(ch.x - px, ch.z - pz) < 2.0;
+};
 function caveTick(dt, t) {
   caveT += dt;
   const px = player.position.x, pz = player.position.z, py = player.position.y;
@@ -4630,7 +4638,6 @@ function caveTick(dt, t) {
     b.pool.scale.setScalar(1 + pulse * 0.18);
     b.l.intensity = (b.t < 30 ? 4 : 1.4) * (0.6 + pulse * 0.4);
   }
-  const ch = caveRoom.chest.position;
   if (caveRoom.shine.visible) {
     const glowPulse = 0.5 + 0.5 * Math.sin(t * 2.2);
     const [halo, shaft, sl] = caveRoom.shine.children;
@@ -4641,8 +4648,7 @@ function caveTick(dt, t) {
     sl.intensity = 1.6 + glowPulse * 1.4;
   }
   // the box asks before it gives
-  if (!save.treasure.includes(caveKey) && !gate && py > ch.y + (caveRoom.floorY || 0) - 2.2
-      && Math.hypot(ch.x - px, ch.z - pz) < 2.0) {
+  if (chestInReach(px, py, pz)) {
     openGate({ plain: true, head: 'The old box asks one question', onPass: caveTakeTreasure });
   }
 
@@ -6504,6 +6510,7 @@ if (DBG) window.__w = {
     spray: caveRoom.splash.dat.slice(0, 3).map((d) => +d.y.toFixed(2)),
     rings: ripples.filter((r) => r.m.parent === caveRoom.g).length,
   } : null),
+  gateReset: () => { gate = null; $('#gate').classList.remove('on'); },
   chest: () => (caveRoom ? {
     x: +caveRoom.chest.position.x.toFixed(1), z: +caveRoom.chest.position.z.toFixed(1),
     vis: caveRoom.chest.visible, shine: caveRoom.shine.visible, taken: save.treasure.includes(caveKey),

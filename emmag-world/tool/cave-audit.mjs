@@ -76,6 +76,11 @@ for (const key of KEYS) {
   if (e > 0.95) bad(tag, `gift outside the vault (ellipse ${e.toFixed(2)})`);
   const cr = await ev(reachFn(cx, cz));
   if (cr > REACH) bad(tag, `gift unreachable, closest ${cr} m (asks ${PICKUP})`);
+  // and standing on it has to actually arm the box: the vault is turned to face
+  // the hall, so a reach test on the model's own position never fires
+  await ev(`window.__w.gateReset(); window.__w.tp(${cx}, ${cz}, 0)`);
+  await sleep(400);
+  if (!(await ev(`document.querySelector('#gate').className.includes('on')`))) bad(tag, 'standing on the gift does not open it');
 
   // caches: walkable to
   for (const [x, z] of info.caches) {
