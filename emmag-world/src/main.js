@@ -4263,7 +4263,7 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
   shineL.position.y = 1.6;
   shine.add(halo, shaft, shineL);
   shine.position.copy(chest.position);
-  shine.visible = !save.treasure.includes(key);
+  shine.visible = false;   // lit per tick, only while she is in the vault
   dv.add(shine);
 
   // three crystals, scattered anywhere on the hall floor
@@ -4477,7 +4477,7 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
   caveKey = key;
   caveRoom = {
     g, rooms: CAVE_ROOMS, crystals, chest, doors, bats, moss, mouth, solids, caches, kind: K.id, floorY: y0,
-    vault, rot, vaultG: dv, glow: K.glow !== 0,
+    vault, rot, vaultG: dv, glow: K.glow !== 0, moon: { l: crack, beam },
     ledge: K.ledge ? LEDGE : null, stair: K.stair ? STAIR : null,
     arch: { g: arch, door: glowM, light: glowL },
     lake: { x: W(0, -6)[0], z: W(0, -6)[1], r: lr }, worms, mist,
@@ -4514,7 +4514,11 @@ function enterCave(c) {
       k.got = lit; k.g.visible = !lit; k.light.intensity = lit ? 0 : (caveRoom.glow ? 1.5 : 0);
     }
     caveRoom.chest.visible = !save.treasure.includes(caveKey);
-    caveRoom.shine.visible = caveRoom.chest.visible;
+    // entry always starts dark: the vault lights belong to whoever is standing in it,
+    // and her old coordinates can land inside the new vault before she is moved
+    caveRoom.shine.visible = false;
+    caveRoom.moon.l.visible = false;
+    caveRoom.moon.beam.visible = false;
     updateObjective();
     $('#fade').classList.remove('on');
     toast('A cave under the hill');
@@ -4647,6 +4651,12 @@ function caveTick(dt, t) {
     b.pool.scale.setScalar(1 + pulse * 0.18);
     b.l.intensity = (b.t < 30 ? 4 : 1.4) * (0.6 + pulse * 0.4);
   }
+  // the vault is the one room she has to find: its moonbeam and the gold glow over
+  // the box must not light it up from the hall, or it reads as a room already lit
+  const inVault = inRoom(caveRoom.vault, px, pz, 3);
+  caveRoom.moon.l.visible = inVault;
+  caveRoom.moon.beam.visible = inVault;
+  caveRoom.shine.visible = inVault && caveRoom.chest.visible;
   if (caveRoom.shine.visible) {
     const glowPulse = 0.5 + 0.5 * Math.sin(t * 2.2);
     const [halo, shaft, sl] = caveRoom.shine.children;

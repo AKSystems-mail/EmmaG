@@ -57,10 +57,14 @@ for (const key of KEYS) {
     if (c.in && c.key === key) { info = J(await ev(`JSON.stringify(window.__w.caveRoomInfo())`)); break; }
   }
   if (!info) { bad(key, 'cave never built'); continue; }
+  await sleep(400);   // the entry fade moves her to the mouth 300ms in: do not sample mid-transition
   const tag = `${key} ${info.kind}`;
   const chest = J(await ev(`JSON.stringify(window.__w.chest())`));
   const crys = J(await ev(`JSON.stringify(window.__w.cave().crystals)`));
   const v = info.vault;
+
+  // the vault is the room she has to find: its light may not be on from the hall
+  if (chest.shine) bad(tag, 'the secret room is lit from the hall');
 
   // crystals: nothing may push her off one, and one has to be walkable to
   const disp = J(await ev(`JSON.stringify(window.__w.cave().crystals.map((c) => { const q = window.__w.pushAt(c.x, c.z); return +Math.hypot(q[0] - c.x, q[1] - c.z).toFixed(2); }))`));
@@ -127,6 +131,13 @@ for (const key of KEYS) {
     if (!back.crystals.every((k) => k.got)) bad(tag, 'crystals came back after the door was opened');
     if (!J(await ev(`JSON.stringify(window.__w.caveDoors())`)).some((d) => d.open)) bad(tag, 'the open door closed itself');
   }
+  // ...and it still lights up once she is standing in it. Teleporting into the vault
+  // arms the gift gate, which would block the reach walks above, so this goes last
+  await ev(`window.__w.caveTp(${v.x}, ${v.z})`);
+  await sleep(400);
+  if (!J(await ev(`JSON.stringify(window.__w.chest())`)).shine) bad(tag, 'the secret room stays dark inside');
+  await ev(`window.__w.gateReset()`);
+  await ev(`window.__w.caveTp(${v.x}, ${v.z + 30})`);
   console.log(`${tag.padEnd(18)} crystals ${crys.length}  gift ${cr} m  caches ${info.caches.length}  doors ${info.doors.length}`);
 }
 
