@@ -172,7 +172,7 @@ body.photo #shot { display:block; }
 /* ---- one button system: cream sticker, ink outline, hard lip that
    presses down.  Last in the sheet on purpose, so it beats the
    per-button radii and gradients above instead of duplicating them. ---- */
-#go, #install, #mute, #book, #camp, #photo, #shot, #act, #bigclose,
+#go, #install, #mute, #book, #camp, #photo, #shot, #act, #bigclose, #booktabs button,
 .row button, #bookclose, #pdone, #tpclose, #tplist button, .choices button {
   font-family:inherit; font-weight:800; letter-spacing:.05em; color:#2a1a4a;
   border:2px solid #2a1a4a; border-radius:10px;
@@ -182,7 +182,7 @@ body.photo #shot { display:block; }
   -webkit-user-select:none; user-select:none; touch-action:manipulation;
 }
 #go:active, #mute:active, #book:active, #camp:active, #photo:active, #shot:active,
-#act:active, #bigclose:active, .row button:active, #bookclose:active,
+#act:active, #bigclose:active, #booktabs button:active, .row button:active, #bookclose:active,
 #pdone:active, #tpclose:active, #tplist button:active, .choices button:active {
   transform:translateY(4px); box-shadow:0 0 0 #2a1a4a, 0 2px 6px rgba(6,9,22,.3);
 }
@@ -193,13 +193,8 @@ body.photo #shot { display:block; }
 #go { border-radius:14px; text-transform:uppercase; letter-spacing:.14em; }
 #install { display:block; margin:14px auto 0; padding:11px 24px; font-size:12px; text-transform:uppercase; }
 #install[hidden] { display:none; }
-/* book tabs are tags; the map objectives are real buttons, same sticker system */
-#booktabs button {
-  border-radius:999px; border-color:rgba(183,156,232,.7); color:#efe6ff;
-  background:rgba(20,16,40,.5); box-shadow:none; font-size:11px;
-}
-#booktabs button:active { transform:translateY(2px); box-shadow:none; }
-#booktabs button.on { color:#2a1a4a; background:#dcc8ff; border-color:#2a1a4a; }
+/* book tabs are the same sticker buttons as the map chips, just smaller */
+#booktabs button { font-size:11px; }
 #bigchips button {
   font:800 11px system-ui; letter-spacing:.04em; color:#2a1a4a;
   padding:7px 14px; border-radius:10px; border:2px solid #2a1a4a;
@@ -207,8 +202,8 @@ body.photo #shot { display:block; }
   box-shadow:0 3px 0 #2a1a4a, 0 6px 14px rgba(6,9,22,.3);
   transition:transform .07s ease, box-shadow .07s ease;
 }
-#bigchips button:active { transform:translateY(3px); box-shadow:0 0 0 #2a1a4a; }
-#bigchips button.on {
+#bigchips button:active, #booktabs button:active { transform:translateY(3px); box-shadow:0 0 0 #2a1a4a; }
+#bigchips button.on, #booktabs button.on {
   color:#2a1a4a; border-color:#2a1a4a;
   background:linear-gradient(180deg,#ffe3fb,#b79ce8);
 }
