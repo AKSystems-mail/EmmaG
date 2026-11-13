@@ -232,12 +232,12 @@ def build_sleeping_giant(out_glb, preview_dir=None):
 
     # 2. Slumped Torso: Width ~3.4m (rx=1.70), Belly Depth ~2.6m (ry=1.30)
     torso_profile = [
-        (Vector((0.0,  0.18, 1.45)), 1.50, 1.18),
-        (Vector((0.0,  0.02, 2.35)), 1.66, 1.30),  # Belly (depth ~2.6m)
-        (Vector((0.0, -0.10, 3.35)), 1.70, 1.24),  # Lower chest (width ~3.4m)
-        (Vector((0.0, -0.18, 4.35)), 1.64, 1.14),  # Upper chest
-        (Vector((0.0, -0.22, 5.10)), 1.36, 0.92),  # Shoulders
-        (Vector((0.0, -0.30, 5.52)), 0.72, 0.62),  # Neck base
+        (Vector((0.0,  0.18, 1.45)), 1.10, 0.94),
+        (Vector((0.0,  0.02, 2.35)), 1.22, 1.04),  # Belly
+        (Vector((0.0, -0.10, 3.35)), 1.28, 1.02),  # Lower chest
+        (Vector((0.0, -0.18, 4.35)), 1.24, 0.96),  # Upper chest
+        (Vector((0.0, -0.22, 5.10)), 1.04, 0.78),  # Shoulders
+        (Vector((0.0, -0.30, 5.52)), 0.62, 0.54),  # Neck base
     ]
     add_lofted_tube(bm_giant, torso_profile, segments=28, cap_ends=True, noise_amp=0.04, noise_freq=1.0)
 
@@ -256,12 +256,22 @@ def build_sleeping_giant(out_glb, preview_dir=None):
     for side in (-1.0, 1.0):
         add_icosphere_scaled(
             bm_giant,
-            center=(side * 1.45, -0.16, 4.88),
-            scale_vec=(0.68, 0.65, 0.56),
+            center=(side * 1.40, -0.16, 4.84),
+            scale_vec=(0.60, 0.58, 0.52),
             rot_euler=(0.15, side * -0.25, 0.0),
             subdivisions=3,
             noise_amp=0.03,
         )
+
+    # Shoulder into arm: the deltoid ends where the arm tube starts, so a step
+    # shows. One taper from the deltoid centre down the arm makes it continuous
+    for side in (-1.0, 1.0):
+        sleeve_pts = [
+            (Vector((side * 1.42, -0.16, 4.86)), 0.60, 0.57),
+            (Vector((side * 1.66, -0.26, 4.30)), 0.52, 0.50),
+            (Vector((side * 1.80, -0.36, 3.78)), 0.46, 0.45),
+        ]
+        add_lofted_tube(bm_giant, sleeve_pts, segments=16, cap_ends=True, noise_amp=0.02)
 
     # 3. Crossed Legs (Knee span ~5.5m -> outer knee X reaches ~ +/- 2.75m)
     for side in (-1.0, 1.0):
