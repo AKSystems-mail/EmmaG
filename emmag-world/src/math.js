@@ -1,6 +1,7 @@
-// 2nd-grade problems: add/sub within 20 and 100, skip counting, place value.
-// Level 5 bridges: times tables and two-digit x one-digit with rounding, so
-// three-digit work at level 6 is not a cliff. Level 6 is the 3rd-grade tier.
+// 2nd grade: add/sub within 20 and 100, skip counting, place value.
+// L5 bridges: times tables and two-digit x one-digit with rounding, so three-digit
+// work at L6 is not a cliff. L6 is 3rd grade. L7-L8 are 4th grade: two-digit
+// multiplication, division with remainders, tenths, fractions, area.
 // Questions ramp by `level` (0..5) and, when the game passes its inventory,
 // some are word problems about what Emma is actually carrying.
 
@@ -15,6 +16,8 @@ const PLAN = [
   ['add20', 'sub20', 'skip', 'add100', 'sub100', 'place'],
   ['mul', 'mul', 'mul2', 'round', 'place'],
   ['mul', 'mul', 'big', 'bigsub', 'round'],
+  ['mul2', 'mul2x2', 'div', 'rem', 'round'],
+  ['mul2x2', 'div', 'rem', 'dec', 'frac', 'area'],
 ];
 
 export const MAX_LEVEL = PLAN.length - 1;
@@ -64,6 +67,35 @@ export function makeProblem(level = 0, ctx = {}, rand = Math.random) {
     const a = ri(12, 29, rand), b = ri(2, 5, rand);
     q = `${a} × ${b} = ?`; answer = a * b;
     hint = `Split ${a} into tens and ones: ${Math.floor(a / 10) * 10} × ${b}, then ${a % 10} × ${b}.`;
+  } else if (kind === 'mul2x2') {
+    const a = ri(12, 29, rand), b = ri(11, 19, rand);
+    q = `${a} × ${b} = ?`; answer = a * b;
+    hint = `Split ${b} into ${Math.floor(b / 10) * 10} and ${b % 10}: ${a} × ${Math.floor(b / 10) * 10}, then ${a} × ${b % 10}.`;
+  } else if (kind === 'div') {
+    const b = ri(2, 9, rand), k = ri(3, 12, rand);
+    q = `${b * k} ÷ ${b} = ?`; answer = k;
+    hint = `How many ${b}s fit in ${b * k}?`;
+  } else if (kind === 'rem') {
+    const b = ri(3, 9, rand), k = ri(2, 9, rand), r = ri(1, b - 1, rand);
+    q = `${b * k + r} ÷ ${b} — what is the remainder?`; answer = r;
+    hint = `Find the biggest multiple of ${b} that fits, then count what is left.`;
+  } else if (kind === 'dec') {
+    const a = ri(11, 89, rand), b = ri(11, 89, rand);   // tenths, kept as integers
+    q = `${(a / 10).toFixed(1)} + ${(b / 10).toFixed(1)} = ?`; answer = a + b;
+    hint = `Line up the decimal points, add the tenths, then the ones.`;
+  } else if (kind === 'frac') {
+    const d = pick([4, 5, 6, 8, 10], rand), sub = rand() < 0.45;
+    const hi = ri(2, d - 1, rand), lo = ri(1, hi - 1, rand);
+    const [a, b] = sub ? [hi, lo] : [lo, ri(1, d - lo, rand)];
+    q = `${a}/${d} ${sub ? '−' : '+'} ${b}/${d} = ?/${d}`;
+    answer = sub ? a - b : a + b;
+    hint = `The bottoms match, so ${sub ? 'subtract' : 'add'} the tops: ${a} ${sub ? '−' : '+'} ${b}.`;
+  } else if (kind === 'area') {
+    const w = ri(3, 12, rand), h = ri(3, 12, rand), per = rand() < 0.5;
+    q = per ? `A rectangle is ${w} by ${h}. What is the distance all the way around?`
+      : `A rectangle is ${w} by ${h}. What is the area?`;
+    answer = per ? 2 * (w + h) : w * h;
+    hint = per ? `Go all the way round: ${w} + ${h} + ${w} + ${h}.` : `Area is length × width: ${w} × ${h}.`;
   } else if (kind === 'big') {
     const a = ri(150, 640, rand), b = ri(105, 299, rand);
     q = `${a} + ${b} = ?`; answer = a + b;
@@ -118,6 +150,11 @@ export function makeProblem(level = 0, ctx = {}, rand = Math.random) {
   const spread = kind === 'place' ? 4
     : kind === 'round' ? 10
     : kind === 'mul2' ? 20
+    : kind === 'mul2x2' ? 40
+    : kind === 'div' || kind === 'rem' ? 5
+    : kind === 'frac' ? 3
+    : kind === 'dec' ? 12
+    : kind === 'area' ? 14
     : kind === 'big' || kind === 'bigsub' ? 30
     : Math.max(4, Math.round(Math.abs(answer) * 0.4));
   let guard = 0;
@@ -134,5 +171,7 @@ export function makeProblem(level = 0, ctx = {}, rand = Math.random) {
     const j = Math.floor(rand() * (i + 1));
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
+  // tenths stay integers until here: 2.7 + 1 is not 3.7 in binary floating point
+  if (kind === 'dec') return { q, answer: answer / 10, choices: arr.map((c) => c / 10), hint, kind };
   return { q, answer, choices: arr, hint, kind };
 }
