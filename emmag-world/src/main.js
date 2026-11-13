@@ -3243,6 +3243,19 @@ function solarDay(d) {
   sunMax = Math.max(1.30, Math.PI / 2 - Math.abs(lat - dec));   // peak elevation, radians
 }
 
+// the shadow ring is centred on Emma, so it has to follow her every frame: on the 5 s
+// sky tick it jumped 5 m at a time and every shadow in the ring popped in late.
+// It moves a whole shadow texel at a time so walking does not crawl the edges.
+const SHADOW_TEX = 56 / 2048;
+function aimSun() {
+  const tx = Math.round(player.position.x / SHADOW_TEX) * SHADOW_TEX;
+  const tz = Math.round(player.position.z / SHADOW_TEX) * SHADOW_TEX;
+  const c = Math.cos(skySun);
+  sun.position.set(tx + Math.sin(skyAz) * c * 90, Math.max(4, Math.sin(skySun) * 90), tz + Math.cos(skyAz) * c * 90);
+  sun.target.position.set(tx, 0, tz);
+  sun.target.updateMatrixWorld();
+}
+
 function updateSky() {
   const d = new Date();
   solarDay(d);
@@ -3269,9 +3282,7 @@ function updateSky() {
   hemi.intensity = 0.42 + day * 0.5;
   sun.intensity = day * 0.9;
   moon.intensity = (1 - day) * 0.42;
-  sun.position.set(player.position.x + Math.sin(skyAz) * Math.cos(sunAlt) * 90, Math.max(4, Math.sin(sunAlt) * 90), player.position.z + Math.cos(skyAz) * Math.cos(sunAlt) * 90);
-  sun.target.position.copy(player.position);
-  sun.target.updateMatrixWorld();
+  aimSun();
   moon.position.set(player.position.x - Math.cos(a) * 60, 60, player.position.z - 30);
   stars.material.opacity = Math.pow(1 - day, 1.6);
   cloudMat.color.copy(skyCol).lerp(new THREE.Color(0xffffff), 0.72);
@@ -6228,6 +6239,7 @@ function tick() {
   }
   skyDome.position.copy(camera.position);
   stars.position.copy(camera.position);   // every frame: on the 5s sky tick it snapped forward
+  aimSun();                              // same reason, and it is what casts the shadows
   if (inCave && caveRoom) caveTick(dt, t);
   rippleTick(dt);   // cave rings and pond rings expire even when nothing is fishing
 
