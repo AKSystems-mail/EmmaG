@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as skClone } from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { makeProblem } from './math.js';
+import { makeProblem, stepLevel, MAX_LEVEL } from './math.js';
 import { Sound } from './audio.js';
 
 const $ = (s) => document.querySelector(s);
@@ -49,7 +49,7 @@ save.friends ||= []; save.camps ||= []; save.fireflies ||= false;
 save.journal ||= []; save.badges ||= []; save.catches ||= []; save.notes ||= [];
 save.garden ||= []; save.gifts ||= 0; save.names ||= {}; save.postcards ||= [];
 save.caves ||= []; save.treasure ||= []; save.caches ||= [];
-  save.mathLvl ||= 0; save.mStreak ||= 0; save.quests ||= {}; save.giant ||= false; save.giantN ||= 0; save.decor ||= [];
+  save.mathLvl ||= 0; save.mStreak ||= 0; save.mMiss ||= 0; save.quests ||= {}; save.giant ||= false; save.giantN ||= 0; save.decor ||= [];
 save.crossed ||= 0; save.bestSkip ||= 0; save.boat ||= false;
 save.painting ||= ''; save.giftDay ||= '';
 // ponytail: a full quota drops the write instead of the frame -- postcards are ~1 MB
@@ -2580,7 +2580,7 @@ function giantTick(dt, t) {
 
 function giantAsk() {
   if (giant.awake) { toast('The giant is awake. He nods slowly.'); return; }
-  const p = makeProblem(Math.min(5, 1 + giant.n), {}, Math.random);
+  const p = makeProblem(Math.min(MAX_LEVEL, 1 + giant.n), {}, Math.random);
   gate = { lm: null, p, misses: 0, giant: true };
   $('#gh').textContent = `The giant stirs — ${giant.n + 1} of 3`;
   renderGate();
@@ -2828,11 +2828,11 @@ function answer(v, btn) {
   const p = gate.p;
   if (v === p.answer) {
     btn.classList.add('right');
-    // three first-try answers in a row promote one level, silently
-    if (!gate.misses) {
-      save.mStreak = (save.mStreak || 0) + 1;
-      if (save.mStreak >= 3) { save.mStreak = 0; save.mathLvl = Math.min(5, (save.mathLvl || 0) + 1); }
-    } else save.mStreak = 0;
+    // three first-try answers in a row promote one level, three misses in a row
+    // step back one, both silently
+    const r = stepLevel(save.mathLvl || 0, save.mStreak || 0, save.mMiss || 0,
+      gate.misses ? 'sloppy' : 'clean');
+    save.mathLvl = r.lvl; save.mStreak = r.streak; save.mMiss = r.miss;
     persist();
     sfx.unlock();
     const lm = gate.lm, wasGiant = gate.giant, onPass = gate.onPass;
@@ -2862,7 +2862,13 @@ function answer(v, btn) {
   }
   sfx.oops();
   gate.misses++;
-  save.mStreak = 0; persist();
+  // one miss per question, however many times she taps: three separate questions
+  // missed in a row steps the level down, three taps on one does not
+  if (gate.misses === 1) {
+    const r = stepLevel(save.mathLvl || 0, save.mStreak || 0, save.mMiss || 0, 'wrong');
+    save.mathLvl = r.lvl; save.mStreak = r.streak; save.mMiss = r.miss;
+  }
+  persist();
   btn.classList.add('wrong');
   btn.disabled = true;
   fbEl.textContent = gate.misses >= 2 ? `Hint: ${p.hint}` : 'Not quite — try another one.';

@@ -1,5 +1,6 @@
 // 2nd-grade problems: add/sub within 20 and 100, skip counting, place value.
-// Level 5 is the 3rd-grade tier: times tables, three-digit add/sub, rounding.
+// Level 5 bridges: times tables and two-digit x one-digit with rounding, so
+// three-digit work at level 6 is not a cliff. Level 6 is the 3rd-grade tier.
 // Questions ramp by `level` (0..5) and, when the game passes its inventory,
 // some are word problems about what Emma is actually carrying.
 
@@ -12,8 +13,24 @@ const PLAN = [
   ['add20', 'sub20', 'skip', 'add100'],
   ['add20', 'sub20', 'skip', 'add100', 'sub100'],
   ['add20', 'sub20', 'skip', 'add100', 'sub100', 'place'],
+  ['mul', 'mul', 'mul2', 'round', 'place'],
   ['mul', 'mul', 'big', 'bigsub', 'round'],
 ];
+
+export const MAX_LEVEL = PLAN.length - 1;
+
+// The ramp lives here so it can be tested without a running game. 'clean' is a
+// first-try answer, 'sloppy' a correct one after a miss, 'wrong' a miss.
+export function stepLevel(lvl, streak, miss, kind) {
+  if (kind === 'clean') {
+    streak += 1;
+    if (streak >= 3) return { lvl: Math.min(MAX_LEVEL, lvl + 1), streak: 0, miss: 0 };
+    return { lvl, streak, miss: 0 };
+  }
+  if (kind === 'sloppy') return { lvl, streak: 0, miss };
+  miss += 1;
+  return miss >= 3 ? { lvl: Math.max(0, lvl - 1), streak: 0, miss: 0 } : { lvl, streak: 0, miss };
+}
 
 const NAMES = { wood: 'twigs', stone: 'stones', bloom: 'flowers', spark: 'sparkles' };
 
@@ -43,6 +60,10 @@ export function makeProblem(level = 0, ctx = {}, rand = Math.random) {
     const a = ri(2, 9, rand), b = ri(2, 10, rand);
     q = `${a} × ${b} = ?`; answer = a * b;
     hint = `Think of ${b} rows of ${a}. Count up by ${a}s.`;
+  } else if (kind === 'mul2') {
+    const a = ri(12, 29, rand), b = ri(2, 5, rand);
+    q = `${a} × ${b} = ?`; answer = a * b;
+    hint = `Split ${a} into tens and ones: ${Math.floor(a / 10) * 10} × ${b}, then ${a % 10} × ${b}.`;
   } else if (kind === 'big') {
     const a = ri(150, 640, rand), b = ri(105, 299, rand);
     q = `${a} + ${b} = ?`; answer = a + b;
@@ -96,6 +117,7 @@ export function makeProblem(level = 0, ctx = {}, rand = Math.random) {
   }
   const spread = kind === 'place' ? 4
     : kind === 'round' ? 10
+    : kind === 'mul2' ? 20
     : kind === 'big' || kind === 'bigsub' ? 30
     : Math.max(4, Math.round(Math.abs(answer) * 0.4));
   let guard = 0;
