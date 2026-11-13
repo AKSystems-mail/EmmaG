@@ -241,6 +241,17 @@ def build_sleeping_giant(out_glb, preview_dir=None):
     ]
     add_lofted_tube(bm_giant, torso_profile, segments=28, cap_ends=True, noise_amp=0.04, noise_freq=1.0)
 
+    # Shoulder: the cap alone reads as a ball stuck on the side. One tapered mass
+    # from the neck base out over the cap gives the deltoid-to-torso slope; a thin
+    # proud ridge instead reads as a slit, so this stays wide and inside the body
+    for side in (-1.0, 1.0):
+        trap_pts = [
+            (Vector((side * 0.26, -0.26, 5.44)), 0.50, 0.45),
+            (Vector((side * 0.88, -0.22, 5.22)), 0.55, 0.49),
+            (Vector((side * 1.40, -0.17, 4.90)), 0.62, 0.57),
+        ]
+        add_lofted_tube(bm_giant, trap_pts, segments=14, cap_ends=True, noise_amp=0.02)
+
     # Rounded shoulder caps
     for side in (-1.0, 1.0):
         add_icosphere_scaled(
@@ -283,15 +294,26 @@ def build_sleeping_giant(out_glb, preview_dir=None):
         add_lofted_tube(bm_giant, shin_pts, segments=18, cap_ends=True, noise_amp=0.025)
 
         # Foot: Foot Length ~1.4m, Foot Thickness ~0.7m
-        foot_center = Vector((-side * 1.48, -1.66 + y_off, 0.92))
-        add_icosphere_scaled(
-            bm_giant,
-            center=foot_center,
-            scale_vec=(0.70, 0.40, 0.35),  # 2*0.70 = 1.4m length, 2*0.35 = 0.7m thick
-            rot_euler=(0.0, 0.08 * side, -side * 0.32),
-            subdivisions=3,
-            noise_amp=0.02,
-        )
+        # Foot: the forward one is turned on its side -- sole out, toes forward --
+        # the lotus read where the underside of the foot shows from the side
+        if side > 0:
+            add_icosphere_scaled(
+                bm_giant,
+                center=Vector((-1.58, -1.86, 1.06)),
+                scale_vec=(0.70, 0.40, 0.33),
+                rot_euler=(0.0, 1.02, -0.20),
+                subdivisions=3,
+                noise_amp=0.02,
+            )
+        else:
+            add_icosphere_scaled(
+                bm_giant,
+                center=Vector((1.46, -1.50, 0.88)),
+                scale_vec=(0.70, 0.40, 0.35),
+                rot_euler=(0.0, 0.08 * side, -side * 0.32),
+                subdivisions=3,
+                noise_amp=0.02,
+            )
     # 4. Arms & Hands
     # Upper Arm Diameter ~0.9m (r=0.45), Forearm Diameter ~0.75m (r=0.375), Hand Length ~1.1m
     for side in (-1.0, 1.0):
@@ -302,6 +324,16 @@ def build_sleeping_giant(out_glb, preview_dir=None):
             (Vector((side * 1.92, -0.62, 3.05)), 0.42, 0.41),
         ]
         add_lofted_tube(bm_giant, upper_arm_pts, segments=18, cap_ends=True, noise_amp=0.025)
+
+        # Elbow: the joint is a rounded stone knob, wider than either tube end, so
+        # the arm bends through a ball instead of two cones butted together
+        add_icosphere_scaled(
+            bm_giant,
+            center=(side * 1.91, -0.63, 3.02),
+            scale_vec=(0.45, 0.44, 0.44),
+            subdivisions=3,
+            noise_amp=0.015,
+        )
 
         # Forearm: Elbow -> Wrist on knee/lap
         forearm_pts = [
@@ -398,8 +430,9 @@ def build_sleeping_giant(out_glb, preview_dir=None):
         is_deep_underside = (n.z < -0.45 and c.z > 1.2)
 
         # Pale Cream Lichen patches (belly right-center, left shin, crown)
-        is_belly_lichen = ((c.x + 0.22) ** 2 / 0.42 + (c.y + 1.15) ** 2 / 0.35 + (c.z - 2.65) ** 2 / 0.45) < 1.0
-        is_shin_lichen = ((c.x - 1.35) ** 2 / 0.35 + (c.y + 1.55) ** 2 / 0.25 + (c.z - 1.35) ** 2 / 0.25) < 1.0
+        # body is one grey; the pale patches read as paint on stone
+        is_belly_lichen = False
+        is_shin_lichen = False
 
         # Moss patches on shoulders, upper back, and head crown
         is_shoulder_moss = (
