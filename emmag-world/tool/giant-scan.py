@@ -66,6 +66,68 @@ bpy.ops.mesh.delete_loose()
 bpy.ops.mesh.normals_make_consistent(inside=False)
 bpy.ops.object.mode_set(mode='OBJECT')
 
+# the scan is an open shell: missing face-side and knee panels are holes, not
+# silhouettes -> fill every boundary loop, big ones included
+bm = bmesh.new()
+bm.from_mesh(giant.data)
+seen = set()
+loops = []
+for e in [e for e in bm.edges if len(e.link_faces) == 1]:
+    if e.index in seen:
+        continue
+    stack, loop = [e], []
+    seen.add(e.index)
+    while stack:
+        cur = stack.pop()
+        loop.append(cur)
+        for v in cur.verts:
+            for n in v.link_edges:
+                if n.index not in seen and len(n.link_faces) == 1:
+                    seen.add(n.index)
+                    stack.append(n)
+    loops.append(loop)
+print("[Giant] boundary loops", len(loops),
+      "perimeters", sorted(round(sum(e.calc_length() for e in l), 3) for l in loops)[-6:])
+for loop in loops:
+    if len(loop) < 3:
+        continue
+    cap_r = sum(e.calc_length() for e in loop) / 4.0
+    bm.faces.ensure_lookup_table()
+    first = len(bm.faces)
+    bco = [v.co.copy() for e in loop for v in e.verts]
+    bmesh.ops.holes_fill(bm, edges=loop, sides=0)
+    bm.faces.ensure_lookup_table()
+    cap = [f for f in bm.faces if f.index >= first]
+    if not cap:
+        continue
+    # a bare n-gon reads as a flat plate where the scan was chopped off ->
+    # subdivide it and bulge the middle out so the cheek/knee reads round
+    pedges = {e for f in cap for e in f.edges}
+    bmesh.ops.subdivide_edges(bm, edges=list(pedges), cuts=2, use_grid_fill=True)
+    bm.faces.ensure_lookup_table()
+    cap = [f for f in bm.faces if f.index >= first]
+    nrm = Vector((0, 0, 0))
+    for f in cap:
+        nrm += f.normal * f.calc_area()
+    if nrm.length < 1e-6:
+        continue
+    nrm.normalize()
+    # subdivide rebuilds the boundary verts, so match by position
+    verts = {v for f in cap for v in f.verts
+             if min((v.co - c).length for c in bco) > 1e-5}
+    if not verts:
+        continue
+    reach = 0.45 * cap_r
+    for v in verts:
+        d = min((v.co - c).length for c in bco)
+        w = min(1.0, d / reach) if reach > 1e-6 else 0.0
+        v.co += nrm * (w * 0.55 * cap_r)
+    bmesh.ops.smooth_vert(bm, verts=list(verts), factor=0.6, use_axis_x=True,
+                          use_axis_y=True, use_axis_z=True)
+
+bm.to_mesh(giant.data)
+bm.free()
+
 # level the base: the girl's cut left the slab edge ragged
 bm = bmesh.new()
 bm.from_mesh(giant.data)
@@ -183,30 +245,6 @@ for loop in uv:
 bpy.ops.object.mode_set(mode='OBJECT')
 
 # --- eyes the game can open ---------------------------------------------
-eye_mat = bpy.data.materials.new("Eye")
-eye_mat.use_nodes = True
-eb = eye_mat.node_tree.nodes["Principled BSDF"]
-eb.inputs["Base Color"].default_value = (0.13, 0.15, 0.19, 1)
-eb.inputs["Roughness"].default_value = 0.45
-
-eye_x = HEIGHT * 0.040
-eye_z = HEIGHT * 0.80
-hit, loc, nrm, _ = giant.ray_cast(Vector((eye_x, -12.0, eye_z)), Vector((0.0, 1.0, 0.0)))
-if not hit:
-    raise SystemExit("[Giant] eye ray missed")
-print("[Giant] eye anchor", [round(v, 2) for v in loc])
-for side, name in ((1, "EyeR"), (-1, "EyeL")):
-    bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2, radius=1.0,
-                                          location=(side * eye_x, loc.y - 0.05, loc.z))
-    eye = bpy.context.object
-    eye.name = name
-    eye.data.name = name
-    eye.scale = (0.17, 0.09, 0.115)
-    bpy.ops.object.transform_apply(scale=True, location=False, rotation=True)
-    eye.data.materials.append(eye_mat)
-    for p in eye.data.polygons:
-        p.use_smooth = False
-
 # --- export -------------------------------------------------------------
 for o in bpy.context.scene.objects:
     o.select_set(o.type == 'MESH')

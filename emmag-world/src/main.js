@@ -2540,7 +2540,10 @@ let paintColor = PAINT_COLORS[0], painting = false;
 // like someone sitting down, or he is a boulder with a face on top.
 let giant = null;
 const GIANT_GREEN = 0x9fe6b8;
-// pale plate seams over the stone, the way the concept sheet draws him
+// waking him is a skin change, not an animation: no eyes to open on the scan
+function giantSkin() {
+  for (const mm of giant.stone) { mm.color.set(GIANT_GREEN); mm.emissive.set(GIANT_GREEN); mm.emissiveIntensity = 0.10; }
+}
 function ensureGiant() {
   if (giant) return;
   // a giant nobody can find is scenery: he sits a couple of chunks out, not five
@@ -2552,34 +2555,24 @@ function ensureGiant() {
   g.position.set(s.x, groundAt(s.x, s.z), s.z);   // feet on the actual ground, not on y=0
   scene.add(g);
   // the real thing: 4.9k tris scanned stone giant, mossy base, eyes shut till he wakes
-  giant = { g, x: s.x, z: s.z, n: save.giantN || 0, awake: !!save.giant,
-            eyes: [], stone: [], lid: 0.06, blink: 0, bT: 6 };
+  giant = { g, x: s.x, z: s.z, n: save.giantN || 0, awake: !!save.giant, stone: [] };
   new GLTFLoader().load('/models/giant_lotus.glb', (m) => {
     m.scene.traverse((o) => {
       if (!o.isMesh) return;
       o.castShadow = true; o.frustumCulled = false;
-      if (/^Eye/.test(o.name)) giant.eyes.push(o);
       const mm = o.material;
       if (mm && /Stone/.test(mm.name)) {
         if (!giant.stone.includes(mm)) giant.stone.push(mm);
       }
     });
     g.add(m.scene);
-    if (giant.awake) for (const mm of giant.stone) mm.color.set(GIANT_GREEN);
+    if (giant.awake) giantSkin();
   }, undefined, () => {});
 }
 
-// shut while he sleeps, open once he wakes, with a slow blink now and then
 function giantTick(dt, t) {
   if (!giant) return;
   giant.g.scale.y = 1 + Math.sin(t * 0.7) * 0.01;   // breathing, asleep or not
-  giant.bT -= dt;
-  if (giant.awake && giant.bT <= 0) { giant.bT = 6 + Math.random() * 6; giant.blink = 0.6; }
-  if (giant.blink > 0) giant.blink -= dt;
-  const want = !giant.awake || giant.blink > 0 ? 0.06 : 1;
-  // closes fast, opens slow: a tired giant, not a shutter
-  giant.lid += (want - giant.lid) * Math.min(1, dt * (want > giant.lid ? 8 : 20));
-  for (const e of giant.eyes) e.scale.y = 0.05 + giant.lid * 0.95;   // 0 = shut line
 }
 
 function giantAsk() {
@@ -2849,8 +2842,7 @@ function answer(v, btn) {
         giant.n++;
         if (giant.n >= 3) {
           giant.awake = true; save.giant = true; persist();
-          giant.lid = 0.06; giant.bT = 1.6;   // eyes open, first slow blink soon
-          for (const mm of giant.stone) mm.color.set(GIANT_GREEN);   // one skin, all of him
+          giantSkin();   // one skin, all of him
           hud(); checkBadges();
           logJournal('I woke the giant. He was very tired.');
           burst(new THREE.Vector3(giant.x, 5, giant.z), 0x9fe6b8, 60, 9);
@@ -6406,7 +6398,7 @@ if (DBG) window.__w = {
   frogs: () => ({ ic: inCave, ct: +(caveT || 0).toFixed(2), pond: !!(caveRoom && caveRoom.pond), ready: frogProto.ready, err: window.__frogErr || null,
     at: caveRoom ? caveRoom.frogs.map((f) => [+f.g.position.x.toFixed(1), +f.g.position.y.toFixed(2), +f.g.position.z.toFixed(1), +f.hop.toFixed(2)]) : [] }),
   caveProps: () => ({ rooms: CAVE_ROOMS.map((r) => [r.x, r.z, r.rx, r.rz]), n: caveProps.length, hung: caveRoom ? caveRoom.g.children.filter((c) => c.userData.tag).map((c) => { const p = c.getWorldPosition(new THREE.Vector3()); return [c.userData.tag, +p.x.toFixed(1), +p.y.toFixed(1), +p.z.toFixed(1)]; }) : [] }),
-  giantDbg: () => giant && { wet: inWater(giant.x, giant.z, 0), gy: +giant.g.position.y.toFixed(2), eyes: giant.eyes.length, stone: giant.stone.length, kids: giant.g.children.length, awake: giant.awake, lid: +giant.lid.toFixed(2), col: giant.stone[0] && '#' + giant.stone[0].color.getHexString(), at: [+giant.x.toFixed(1), +giant.z.toFixed(1)] },
+  giantDbg: () => giant && { wet: inWater(giant.x, giant.z, 0), gy: +giant.g.position.y.toFixed(2), stone: giant.stone.length, kids: giant.g.children.length, awake: giant.awake, col: giant.stone[0] && '#' + giant.stone[0].color.getHexString(), at: [+giant.x.toFixed(1), +giant.z.toFixed(1)] },
   grassDbg: () => { const p = pools.grass; if (!p) return 'no pool';
     const bb = p.geometry.boundingBox || (p.geometry.computeBoundingBox(), p.geometry.boundingBox);
     const m = new THREE.Matrix4(), v = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(), out = [];
@@ -6640,13 +6632,13 @@ if (DBG) window.__w = {
   },
   giantGo: (back = 16) => { ensureGiant(); player.position.set(giant.x, 0, giant.z + back); return { x: giant.x, z: giant.z }; },
   giantInfo: () => (giant ? {
-    awake: giant.awake, n: giant.n, lid: +giant.lid.toFixed(2), eyeY: +giant.eyes[0].scale.y.toFixed(2),
+    awake: giant.awake, n: giant.n, skin: giant.stone[0] ? '#' + giant.stone[0].color.getHexString() : '-',
     box: (() => { const b = new THREE.Box3().setFromObject(giant.g); return [b.min.toArray().map((v) => +v.toFixed(1)), b.max.toArray().map((v) => +v.toFixed(1))]; })(),
   } : null),
   giantWake: () => {
     if (!giant) return null;
-    giant.n = 3; giant.awake = true; save.giant = true; giant.lid = 0.06; giant.bT = 1.6;
-    for (const mm of giant.stone) mm.color.set(GIANT_GREEN);
+    giant.n = 3; giant.awake = true; save.giant = true;
+    giantSkin();
     return true;
   },
 };
