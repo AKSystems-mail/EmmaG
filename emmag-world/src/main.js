@@ -1162,6 +1162,7 @@ function burst(pos, hex, n = 14, power = 3, up = 1.5) {
 // ---------------------------------------------------------------- inputs
 const input = { x: 0, y: 0 };
 let camYaw = 0, camPitch = 0.52;
+const giAim = new THREE.Vector3();   // scratch: the giant's chest, for the camera aim
 let camDist = 9.6;
 const CAM_MIN = 4, CAM_MAX = 18;
 addEventListener('wheel', (e) => { camDist = clamp(camDist + e.deltaY * 0.012, CAM_MIN, CAM_MAX); }, { passive: true });
@@ -6028,6 +6029,13 @@ function tick() {
   // camera: looks where she is heading, and pulls in when a tree gets between
   lookAt.set(player.position.x, player.position.y + 1.25, player.position.z)
     .addScaledVector(dir, Math.min(1.5, vel * 0.22));
+  // every other aim in the game is her waist. a 7m statue aimed at from her height
+  // has its head above the frame, so she walks up and never sees his face: lift the
+  // aim toward him as she gets close
+  if (giant && !inCave) {
+    const gd = Math.hypot(giant.x - player.position.x, giant.z - player.position.z);
+    if (gd < 26) lookAt.lerp(giAim.set(giant.x, giant.g.position.y + 4.4, giant.z), (1 - gd / 26) * 0.5);
+  }
   const off = new THREE.Vector3(
     Math.sin(camYaw) * Math.cos(camPitch),
     Math.sin(camPitch),
