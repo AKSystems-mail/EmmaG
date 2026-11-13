@@ -1884,9 +1884,12 @@ function groundAt(x, z) {
   // highest surface wins, and nothing breaks early: a stone under a bridge used to
   // win the loop before the deck was looked at, and she dropped onto it mid-plank
   let y = 0;
-  for (const pd of ponds.values()) y = Math.max(y, onBridge(pd, x, z));
+  // a stone under a deck keeps her on the stone: the deck is a height, not a
+  // ceiling, so max() alone would haul her up through the planks
+  const st = onStones(x, z);
+  if (!st) for (const pd of ponds.values()) y = Math.max(y, onBridge(pd, x, z));
   if (onDock(x, z)) y = Math.max(y, DOCK_Y);
-  if (onStones(x, z)) y = Math.max(y, 0.3);
+  if (st) y = Math.max(y, 0.3);
   return Math.max(y, hillAt(x, z));
 }
 const onBridge = (pd, x, z) => {
@@ -3226,18 +3229,22 @@ function pondExtras(pd) {
   pd.extra = g;
   scene.add(g);
 
-  // stepping stones: a real second crossing, offset off the bridge line. Pads
-  // run the full water line at 2.4 m centres -- they overlap by 0.3 m, so there
-  // is no water between them and she can walk the whole way over
+  // stepping stones: the crossing for a pond that has neither a deck nor a boat.
+  // Where one of those exists the causeway is a second way over the same water --
+  // a row of touching pads, and it runs under the planks, so the deck lifts her
+  // out of the stream mid-crossing.  Pads are 0.85 m at 2.4 m centres: 0.7 m of
+  // water shows between them, and onStones is the walkable line, so she steps over
   pd.stones = [];
-  const off = pd.r * 0.55, half = Math.sqrt(1 - 0.55 ** 2) * pd.r * 0.98;
-  for (let t = -half; t <= half + 0.01; t += 2.4) {
-    const x = pd.axis ? pd.x + t : pd.x + off, z = pd.axis ? pd.z + off : pd.z + t;
-    pd.stones.push({ x, z });
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.45, 0.3, 7), stoneMat);
-    m.position.set(x - pd.x, 0.15, z - pd.z);
-    m.receiveShadow = true;
-    g.add(m);
+  if (pd.kind === 'none') {
+    const off = pd.r * 0.55, half = Math.sqrt(1 - 0.55 ** 2) * pd.r * 0.98;
+    for (let t = -half; t <= half + 0.01; t += 2.4) {
+      const x = pd.axis ? pd.x + t : pd.x + off, z = pd.axis ? pd.z + off : pd.z + t;
+      pd.stones.push({ x, z });
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.95, 0.3, 7), stoneMat);
+      m.position.set(x - pd.x, 0.15, z - pd.z);
+      m.receiveShadow = true;
+      g.add(m);
+    }
   }
 
   // dock: a short pier off the side, for fishing.  It runs 45° off the stream so
