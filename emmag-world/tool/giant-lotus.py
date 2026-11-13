@@ -122,7 +122,7 @@ def add_lofted_tube(bm, points_radii, segments=14, cap_ends=True, noise_amp=0.04
             bm.faces.new((rings[-1][s], rings[-1][s_next], c_end))
 
 
-def add_icosphere_scaled(bm, center, scale_vec, rot_euler=(0, 0, 0), subdivisions=3, noise_amp=0.03):
+def add_icosphere_scaled(bm, center, scale_vec, rot_euler=(0, 0, 0), subdivisions=4, noise_amp=0.03):
     rot = Euler(rot_euler, "XYZ").to_matrix().to_4x4()
     scl = Matrix.Diagonal((scale_vec[0], scale_vec[1], scale_vec[2], 1.0))
     trn = Matrix.Translation(center)
@@ -170,7 +170,7 @@ def build_sleeping_giant(out_glb, preview_dir=None):
     # A. GRASSY MOUND BASE (Origin bottom-center at Z=0, width ~6.3m, depth ~4.6m)
     # --------------------------------------------------------------------------
     bm_mound = bmesh.new()
-    bmesh.ops.create_icosphere(bm_mound, subdivisions=3, radius=1.0)
+    bmesh.ops.create_icosphere(bm_mound, subdivisions=4, radius=1.0)
     for v in bm_mound.verts:
         if v.co.z < 0.0:
             v.co.z = 0.0
@@ -226,7 +226,7 @@ def build_sleeping_giant(out_glb, preview_dir=None):
         bm_giant,
         center=(0.0, 0.18, 1.35),
         scale_vec=(1.62, 1.22, 0.72),
-        subdivisions=3,
+        subdivisions=4,
         noise_amp=0.05,
     )
 
@@ -239,7 +239,7 @@ def build_sleeping_giant(out_glb, preview_dir=None):
         (Vector((0.0, -0.22, 5.10)), 1.36, 0.92),  # Shoulders
         (Vector((0.0, -0.30, 5.52)), 0.72, 0.62),  # Neck base
     ]
-    add_lofted_tube(bm_giant, torso_profile, segments=18, cap_ends=True, noise_amp=0.04, noise_freq=1.0)
+    add_lofted_tube(bm_giant, torso_profile, segments=28, cap_ends=True, noise_amp=0.04, noise_freq=1.0)
 
     # Rounded shoulder caps
     for side in (-1.0, 1.0):
@@ -248,7 +248,7 @@ def build_sleeping_giant(out_glb, preview_dir=None):
             center=(side * 1.45, -0.16, 4.88),
             scale_vec=(0.68, 0.65, 0.56),
             rot_euler=(0.15, side * -0.25, 0.0),
-            subdivisions=2,
+            subdivisions=3,
             noise_amp=0.03,
         )
 
@@ -260,14 +260,14 @@ def build_sleeping_giant(out_glb, preview_dir=None):
             (Vector((side * 1.68, -0.58, 1.34)), 0.56, 0.52),
             (Vector((side * 2.26, -1.10, 1.36)), 0.48, 0.46),
         ]
-        add_lofted_tube(bm_giant, thigh_pts, segments=14, cap_ends=True, noise_amp=0.03)
+        add_lofted_tube(bm_giant, thigh_pts, segments=20, cap_ends=True, noise_amp=0.03)
 
         # Knee bulge (pushes span to ~5.5m)
         add_icosphere_scaled(
             bm_giant,
             center=(side * 2.32, -1.12, 1.36),
             scale_vec=(0.45, 0.46, 0.44),
-            subdivisions=2,
+            subdivisions=3,
             noise_amp=0.02,
         )
 
@@ -280,7 +280,7 @@ def build_sleeping_giant(out_glb, preview_dir=None):
             (Vector((-side * 0.15, -1.82 + y_off, 1.02 + z_off)), 0.34, 0.32),
             (Vector((-side * 1.15, -1.65 + y_off, 0.96 + z_off)), 0.30, 0.28),
         ]
-        add_lofted_tube(bm_giant, shin_pts, segments=12, cap_ends=True, noise_amp=0.025)
+        add_lofted_tube(bm_giant, shin_pts, segments=18, cap_ends=True, noise_amp=0.025)
 
         # Foot: Foot Length ~1.4m, Foot Thickness ~0.7m
         foot_center = Vector((-side * 1.48, -1.66 + y_off, 0.92))
@@ -289,18 +289,9 @@ def build_sleeping_giant(out_glb, preview_dir=None):
             center=foot_center,
             scale_vec=(0.70, 0.40, 0.35),  # 2*0.70 = 1.4m length, 2*0.35 = 0.7m thick
             rot_euler=(0.0, 0.08 * side, -side * 0.32),
-            subdivisions=2,
+            subdivisions=3,
             noise_amp=0.02,
         )
-        for k in range(3):
-            add_icosphere_scaled(
-                bm_giant,
-                center=(-side * 1.48 + side * (k - 1) * 0.21, -2.02 + y_off, 0.87),
-                scale_vec=(0.10, 0.13, 0.085),
-                subdivisions=1,
-                noise_amp=0.0,
-            )
-
     # 4. Arms & Hands
     # Upper Arm Diameter ~0.9m (r=0.45), Forearm Diameter ~0.75m (r=0.375), Hand Length ~1.1m
     for side in (-1.0, 1.0):
@@ -310,7 +301,7 @@ def build_sleeping_giant(out_glb, preview_dir=None):
             (Vector((side * 1.82, -0.35, 3.85)), 0.45, 0.44),
             (Vector((side * 1.92, -0.62, 3.05)), 0.42, 0.41),
         ]
-        add_lofted_tube(bm_giant, upper_arm_pts, segments=12, cap_ends=True, noise_amp=0.025)
+        add_lofted_tube(bm_giant, upper_arm_pts, segments=18, cap_ends=True, noise_amp=0.025)
 
         # Forearm: Elbow -> Wrist on knee/lap
         forearm_pts = [
@@ -318,29 +309,27 @@ def build_sleeping_giant(out_glb, preview_dir=None):
             (Vector((side * 1.56, -1.16, 2.38)), 0.375, 0.365),
             (Vector((side * 1.12, -1.52, 1.88)), 0.34, 0.32),
         ]
-        add_lofted_tube(bm_giant, forearm_pts, segments=12, cap_ends=True, noise_amp=0.02)
+        add_lofted_tube(bm_giant, forearm_pts, segments=18, cap_ends=True, noise_amp=0.02)
 
-        # Hand: palm on the shin, four fingers curled over the edge, one thumb
+        # Hand: a mitten. Stone does not have knuckles, and four tubes read as
+        # claws at gameplay distance -- one lobe plus a thumb is the whole hand
         hand_center = Vector((side * 0.72, -1.68, 1.66))
         add_icosphere_scaled(
             bm_giant,
             center=hand_center,
-            scale_vec=(0.44, 0.34, 0.18),
+            scale_vec=(0.46, 0.42, 0.20),
             rot_euler=(0.25, side * -0.22, side * 0.55),
-            subdivisions=2,
+            subdivisions=4,
             noise_amp=0.015,
         )
-        for k in range(4):
-            fx = -0.30 + 0.20 * k
-            add_lofted_tube(bm_giant, [
-                (Vector((hand_center.x + fx, hand_center.y - 0.20, hand_center.z + 0.03)), 0.085, 0.080),
-                (Vector((hand_center.x + fx * 1.08, hand_center.y - 0.46, hand_center.z - 0.03)), 0.078, 0.072),
-                (Vector((hand_center.x + fx * 1.12, hand_center.y - 0.64, hand_center.z - 0.12)), 0.062, 0.058),
-            ], segments=8, cap_ends=True, noise_amp=0.01)
-        add_lofted_tube(bm_giant, [
-            (Vector((hand_center.x - side * 0.34, hand_center.y - 0.10, hand_center.z + 0.03)), 0.095, 0.090),
-            (Vector((hand_center.x - side * 0.46, hand_center.y - 0.32, hand_center.z - 0.04)), 0.072, 0.068),
-        ], segments=8, cap_ends=True, noise_amp=0.01)
+        add_icosphere_scaled(
+            bm_giant,
+            center=(hand_center.x - side * 0.30, hand_center.y - 0.18, hand_center.z + 0.05),
+            scale_vec=(0.17, 0.26, 0.14),
+            rot_euler=(0.20, side * -0.15, side * 0.45),
+            subdivisions=4,
+            noise_amp=0.01,
+        )
 
     # 5. Head (Dimensions ~1.6H x 1.3W x 1.5D, slumped forward)
     head_center = Vector((0.0, -0.84, 6.00))
@@ -355,7 +344,7 @@ def build_sleeping_giant(out_glb, preview_dir=None):
         center=head_center,
         scale_vec=(0.65, 0.75, 0.80),  # W=1.3m, D=1.5m, H=1.6m
         rot_euler=head_rot,
-        subdivisions=3,
+        subdivisions=4,
         noise_amp=0.02,
     )
 
@@ -392,7 +381,7 @@ def build_sleeping_giant(out_glb, preview_dir=None):
             center=(side * 0.64, -0.68, 6.02),
             scale_vec=(0.10, 0.16, 0.22),
             rot_euler=(0.35, 0.0, side * 0.12),
-            subdivisions=1,
+            subdivisions=2,
             noise_amp=0.0,
         )
 
@@ -488,7 +477,7 @@ def build_sleeping_giant(out_glb, preview_dir=None):
             center=ep,
             scale_vec=(0.085, 0.085, 0.115),
             rot_euler=(rng.uniform(-0.3, 0.3), rng.uniform(-0.3, 0.3), 0.0),
-            subdivisions=2,
+            subdivisions=3,
             noise_amp=0.0,
         )
     created_objs.append(create_mesh_obj("NestEggs", bm_eggs, all_mats, default_mat_idx=7))
@@ -513,7 +502,7 @@ def build_sleeping_giant(out_glb, preview_dir=None):
         for v in stem["verts"]:
             v.co = mt @ mr @ (v.co + Vector((0, 0, 0.06 * mscl)))
         # Cap
-        cap = bmesh.ops.create_icosphere(bm_mush, subdivisions=2, radius=0.11 * mscl)
+        cap = bmesh.ops.create_icosphere(bm_mush, subdivisions=3, radius=0.11 * mscl)
         for v in cap["verts"]:
             if v.co.z < 0:
                 v.co.z *= 0.25
@@ -563,7 +552,7 @@ def build_sleeping_giant(out_glb, preview_dir=None):
     print(f"[SleepingGiant] Initial triangle count: {tris}")
 
     # Calibrate into target range (6,000 - 9,000, target ~8,500)
-    if tris < 6500:
+    if tris < 18000:
         sub = giant.modifiers.new(name="Subdiv", type="SUBSURF")
         sub.subdivision_type = "SIMPLE"
         sub.levels = 1
@@ -572,10 +561,10 @@ def build_sleeping_giant(out_glb, preview_dir=None):
         tris = count_tris(giant)
         print(f"[SleepingGiant] After Simple Subdiv: {tris}")
 
-    if tris > 8800:
+    if tris > 22000:
         dec = giant.modifiers.new(name="Decimate", type="DECIMATE")
         dec.decimate_type = "COLLAPSE"
-        dec.ratio = 8500.0 / float(tris)
+        dec.ratio = 20000.0 / float(tris)
         bpy.ops.object.modifier_apply(modifier=dec.name)
         tris = count_tris(giant)
         print(f"[SleepingGiant] After Decimate: {tris}")
@@ -624,7 +613,7 @@ def build_sleeping_giant(out_glb, preview_dir=None):
             loc = to_final(HEAD_C + HRM @ local)
         loc = Vector(loc) + Vector((0.0, -0.02, 0.0))
         bm_eye = bmesh.new()
-        bmesh.ops.create_icosphere(bm_eye, subdivisions=2, radius=1.0)
+        bmesh.ops.create_icosphere(bm_eye, subdivisions=3, radius=1.0)
         for v in bm_eye.verts:
             v.co.x *= 0.105 * scale_factor
             v.co.y *= 0.045 * scale_factor
