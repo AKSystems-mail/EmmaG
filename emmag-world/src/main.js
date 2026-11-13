@@ -2087,7 +2087,8 @@ function pushOut(x, z) {
       pz = pd.z + (dz / d) * rr;
     }
   }
-  // streams: a narrow band of water, crossed only at the stepping stones
+  // streams: a narrow band of water she walks round, by design -- the stones in
+  // the run are scenery on the centreline, not a crossing
   for (const pd of ponds.values()) {
     const s = pd.stream;
     if (!s) continue;
