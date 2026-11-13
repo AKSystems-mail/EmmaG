@@ -2541,7 +2541,6 @@ let paintColor = PAINT_COLORS[0], painting = false;
 let giant = null;
 const GIANT_GREEN = 0x9fe6b8;
 // pale plate seams over the stone, the way the concept sheet draws him
-const GIANT_SEAM = new THREE.LineBasicMaterial({ color: 0xdfe7f0, transparent: true, opacity: 0.18, depthWrite: false });
 function ensureGiant() {
   if (giant) return;
   // a giant nobody can find is scenery: he sits a couple of chunks out, not five
@@ -2552,7 +2551,7 @@ function ensureGiant() {
   const g = new THREE.Group();
   g.position.set(s.x, groundAt(s.x, s.z), s.z);   // feet on the actual ground, not on y=0
   scene.add(g);
-  // the real thing: 7.7k tris, cross-legged, head bowed, eyes shut till he wakes
+  // the real thing: 4.9k tris scanned stone giant, mossy base, eyes shut till he wakes
   giant = { g, x: s.x, z: s.z, n: save.giantN || 0, awake: !!save.giant,
             eyes: [], stone: [], lid: 0.06, blink: 0, bT: 6 };
   new GLTFLoader().load('/models/giant_lotus.glb', (m) => {
@@ -2563,7 +2562,6 @@ function ensureGiant() {
       const mm = o.material;
       if (mm && /Stone/.test(mm.name)) {
         if (!giant.stone.includes(mm)) giant.stone.push(mm);
-        o.add(new THREE.LineSegments(new THREE.WireframeGeometry(o.geometry), GIANT_SEAM));
       }
     });
     g.add(m.scene);
