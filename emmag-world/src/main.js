@@ -2404,7 +2404,7 @@ function openBook(tab) {
   if (bookTab === 'col') {
     for (const c of CAST) {
       const got = save.friends.includes(c.name);
-      rows.push(`<div class="entry">${got ? c.name : '? ? ?'}<small>${got ? 'friend' : 'not met yet'}</small></div>`);
+      rows.push(`<div class="entry">${got ? c.name : '? ? ?'}<small>${got ? `${save.quests[c.name] | 0}/${ASKS[c.name].length} errands` : 'not met yet'}</small></div>`);
     }
     rows.push(`<div class="entry">Stones awake<small>${save.restored.length}</small></div>`);
     rows.push(`<div class="entry">Camps<small>${save.camps.length}</small></div>`);
@@ -2635,22 +2635,82 @@ function giantAsk() {
 }
 
 // ---------------------------------------------------------------- quests
-const QUEST = {
-  Marlow: ['bloom', 3, 'a crown of clover'],
-  Pip: ['spark', 2, 'a tiny lantern'],
-  Bramble: ['wood', 4, 'a walking stick'],
-  Nix: ['stone', 3, 'a moonstone'],
+// counters the cast can ask about — all of them already in the save, so an errand
+// is only ever a read, never new bookkeeping
+const STAT = {
+  caves: () => save.caves.length,
+  caches: () => save.caches.length,
+  treasure: () => save.treasure.length,
+  fish: () => save.catches.length,
+  stirs: () => save.giantN || 0,
+  woken: () => save.restored.length,
+  math: () => save.mathLvl || 0,
+  garden: () => save.garden.length,
+  skips: () => save.bestSkip || 0,
+  postcards: () => save.postcards.length,
 };
+// seven errands each: half trades, half proof she has been out in the world. The
+// chain is why you keep walking back to them.
+const ASKS = {
+  Marlow: [
+    { res: 'bloom', n: 3, gift: 'a crown of clover' },
+    { stat: 'caves', n: 2, what: 'caves stepped into', gift: 'a sketched cave map' },
+    { res: 'stone', n: 6, gift: 'a smooth grey pebble' },
+    { stat: 'stirs', n: 1, what: 'time the giant stirred', gift: 'a stone whistle' },
+    { stat: 'math', n: 4, what: 'math levels', gift: 'a row of counting stones' },
+    { stat: 'woken', n: 3, what: 'stones woken', gift: 'a piece of old carving' },
+    { res: 'bloom', n: 12, gift: 'a crown for your own hair' },
+  ],
+  Pip: [
+    { res: 'spark', n: 2, gift: 'a tiny lantern' },
+    { stat: 'fish', n: 3, what: 'things fished out', gift: 'a jar of pond water' },
+    { stat: 'caches', n: 2, what: 'hidden caches', gift: 'a shell button' },
+    { stat: 'skips', n: 5, what: 'skips in a row', gift: 'a skipping chant' },
+    { res: 'spark', n: 5, gift: 'a knot of dry grass' },
+    { stat: 'postcards', n: 1, what: 'postcards made', gift: 'a raindrop drawing' },
+    { stat: 'fish', n: 12, what: 'things fished out', gift: 'a glass float' },
+  ],
+  Bramble: [
+    { res: 'wood', n: 4, gift: 'a walking stick' },
+    { stat: 'garden', n: 2, what: 'things growing in your garden', gift: 'a seed packet' },
+    { res: 'bloom', n: 5, gift: 'a pressed flower' },
+    { stat: 'caves', n: 1, what: 'caves stepped into', gift: 'a mushroom from a dark place' },
+    { res: 'wood', n: 10, gift: 'a crooked little stool' },
+    { stat: 'math', n: 3, what: 'math levels', gift: 'a counting rhyme' },
+    { stat: 'garden', n: 6, what: 'things growing in your garden', gift: 'a garden bell' },
+  ],
+  Nix: [
+    { res: 'stone', n: 3, gift: 'a moonstone' },
+    { stat: 'treasure', n: 1, what: 'cave treasures', gift: 'a star chart' },
+    { stat: 'caves', n: 3, what: 'caves stepped into', gift: 'a night-pebble' },
+    { stat: 'stirs', n: 2, what: 'times the giant stirred', gift: 'a jar of dark blue' },
+    { stat: 'math', n: 6, what: 'math levels', gift: 'a moon calendar' },
+    { stat: 'caches', n: 3, what: 'hidden caches', gift: 'a glow marble' },
+    { res: 'spark', n: 10, gift: 'a lantern with no flame' },
+  ],
+};
+const askAt = (name) => (ASKS[name] || [])[save.quests[name] | 0];   // old saves stored true = one done
+const askReady = (name) => { const s = askAt(name); return !!s && (s.res ? save.res[s.res] >= s.n : STAT[s.stat]() >= s.n); };
 function tryQuest(name) {
-  const q = QUEST[name];
-  if (!q || save.quests[name]) return false;
-  const [res, need, gift] = q;
-  if (save.res[res] < need) { toast(`${name} wants ${need} ${LABEL[res]}${need > 1 ? 's' : ''}.`); return true; }
-  save.res[res] -= need;
-  save.quests[name] = true;
+  const chain = ASKS[name], i = save.quests[name] | 0, step = askAt(name);
+  if (!step) return false;                       // nothing left: she just gets their line
+  let how;
+  if (step.res) {
+    if (save.res[step.res] < step.n) {
+      toast(`${name} wants ${step.n} ${LABEL[step.res]}${step.n > 1 ? 's' : ''} — you have ${save.res[step.res]}.`);
+      return true;
+    }
+    save.res[step.res] -= step.n;
+    how = `${step.n} ${LABEL[step.res]}s`;
+  } else {
+    const have = STAT[step.stat]();
+    if (have < step.n) { toast(`${name} wants to hear about ${step.n} ${step.what} — you have ${have}.`); return true; }
+    how = step.what;
+  }
+  save.quests[name] = i + 1;
   hud(); persist(); checkBadges();
-  logJournal(`${name} gave me ${gift} for ${need} ${LABEL[res]}s.`);
-  toast(`${name} gives you ${gift} ✨`);
+  logJournal(`${name} gave me ${step.gift} for ${how}.`);
+  toast(`${name} gives you ${step.gift} ✨${i + 1 < chain.length ? ' — something else is on their mind' : ''}`);
   sfx.restore();
   burst(new THREE.Vector3(player.position.x, 1.4, player.position.z), 0xffe9a8, 24, 3);
   return true;
@@ -2761,6 +2821,9 @@ function objectives() {
     const s = spot(unmet.rx, unmet.rz);
     out.push({ id: 'friend', label: `Meet ${unmet.name}`, x: s.x + 8, z: s.z + 7 });
   }
+  const ready = [...friends.values()].find((f) => f.met && askReady(f.name));
+  if (ready) out.push({ id: 'ask', label: `${ready.name} has a gift for you`,
+    x: ready.g.position.x, z: ready.g.position.z });
   if (!out.length) {
     const a = vnoise(px / 260, pz / 260, save.seed + 55) * Math.PI * 2;
     out.push({ id: 'rove', label: 'Explore', x: px + Math.cos(a) * 220, z: pz + Math.sin(a) * 220 });
@@ -6448,6 +6511,13 @@ if (DBG) window.__w = {
   frogs: () => ({ ic: inCave, ct: +(caveT || 0).toFixed(2), pond: !!(caveRoom && caveRoom.pond), ready: frogProto.ready, err: window.__frogErr || null,
     at: caveRoom ? caveRoom.frogs.map((f) => [+f.g.position.x.toFixed(1), +f.g.position.y.toFixed(2), +f.g.position.z.toFixed(1), +f.hop.toFixed(2)]) : [] }),
   caveProps: () => ({ rooms: CAVE_ROOMS.map((r) => [r.x, r.z, r.rx, r.rz]), n: caveProps.length, hung: caveRoom ? caveRoom.g.children.filter((c) => c.userData.tag).map((c) => { const p = c.getWorldPosition(new THREE.Vector3()); return [c.userData.tag, +p.x.toFixed(1), +p.y.toFixed(1), +p.z.toFixed(1)]; }) : [] }),
+  // one self-check for the errand chains: 7 steps each, every stat reachable
+  asks: () => Object.fromEntries(Object.entries(ASKS).map(([n, c]) =>
+    [n, { steps: c.length, vals: c.map((s) => (s.res ? save.res[s.res] : STAT[s.stat]())) }])),
+  give: (name, n) => { save.quests[name] = n; persist(); },
+  cast: () => [...friends.values()].map((f) => ({ name: f.name, met: f.met, q: save.quests[f.name] | 0,
+    at: [+f.g.position.x.toFixed(1), +f.g.position.z.toFixed(1)] })),
+  addRes: (r, n) => { save.res[r] = (save.res[r] | 0) + n; hud(); persist(); },
   giantDbg: () => giant && { wet: inWater(giant.x, giant.z, 0), gy: +giant.g.position.y.toFixed(2), stone: giant.stone.length, kids: giant.g.children.length, awake: giant.awake, col: giant.stone[0] && '#' + giant.stone[0].color.getHexString(), at: [+giant.x.toFixed(1), +giant.z.toFixed(1)] },
   grassDbg: () => { const p = pools.grass; if (!p) return 'no pool';
     const bb = p.geometry.boundingBox || (p.geometry.computeBoundingBox(), p.geometry.boundingBox);
