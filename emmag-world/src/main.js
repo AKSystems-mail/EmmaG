@@ -1079,6 +1079,8 @@ const pShadow = shadowBlob(1.25);
 const fluffy = new THREE.Group();
 fluffy.userData = { bones: null, legs: [], tail: [], tailRest: [], earL: null, earR: null };
 fluffy.position.copy(player.position).add(new THREE.Vector3(-1, 0, -1));
+// where Emma actually walked, metres apart — the cat follows this on stepping stones
+const catTrack = [];
 fluffy.name = 'fluffy';
 scene.add(fluffy);
 window.__fluffy = fluffy;
@@ -6006,13 +6008,30 @@ function tick() {
   // on a bridge she walks the plank line too, not the water beside it
   // her right hip, in her own frame: a camera-relative slot made the cat orbit her
   // whenever the camera turned while she stood still
+  // stepping stones: a slot glued behind her swings off the line every time she turns
+  // for the next stone, so over water the cat walks her breadcrumbs single file
+  const onRock = !inBoat && onStones(player.position.x, player.position.z);
+  if (onRock) {
+    const last = catTrack[catTrack.length - 1];
+    if (!last || Math.hypot(player.position.x - last.x, player.position.z - last.z) > 0.22)
+      catTrack.push({ x: player.position.x, z: player.position.z });
+    if (catTrack.length > 40) catTrack.shift();
+  } else catTrack.length = 0;
   const efx = Math.sin(player.rotation.y), efz = Math.cos(player.rotation.y);
   const behind = inBoat || deck > 0.2
     ? new THREE.Vector3(-efx, 0, -efz).multiplyScalar(inBoat ? 1.55 : 1.15)
     : new THREE.Vector3(-0.7 * efx - efz, 0, -0.7 * efz + efx);
   const wantF = player.position.clone().add(behind);
-  // the cat obeys the same water, trees and hills as Emma does
-  const [wfx, wfz] = inBoat ? [wantF.x, wantF.z] : pushOut(wantF.x, wantF.z, fluffy.position);
+  if (onRock && catTrack.length > 3) {
+    // walk back along the trail until a metre of it is behind her
+    let acc = 0, k = catTrack.length - 1;
+    while (k > 0 && acc < 1.1) { acc += Math.hypot(catTrack[k].x - catTrack[k - 1].x, catTrack[k].z - catTrack[k - 1].z); k--; }
+    wantF.set(catTrack[k].x, 0, catTrack[k].z);
+  }
+  // the cat obeys the same water, trees and hills as Emma does — except on the trail,
+  // where every point is somewhere she has already stood
+  const trail = inBoat || (onRock && catTrack.length > 3);
+  const [wfx, wfz] = trail ? [wantF.x, wantF.z] : pushOut(wantF.x, wantF.z, fluffy.position);
   const fWas = fluffy.position.clone();
   // ponytail: a plain exponential lerp never arrives — the last few cm crept forever, so the
   // parked cat slid around. Close the loop under 4 cm instead.
@@ -6035,7 +6054,9 @@ function tick() {
   catSit += ((idleT > 6 || petT > 0 ? 1 : 0) - catSit) * Math.min(1, dt * 3.5);
   catLie += ((idleT > 20 ? 1 : 0) - catLie) * Math.min(1, dt * 3);
   if (window.__cs !== undefined) { catSit = window.__cs; catLie = window.__cl || 0; }   // debug pose
-  const fGy = inBoat ? 1.0 : groundAt(fluffy.position.x, fluffy.position.z);
+  const fGy = inBoat ? 1.0
+    : onRock ? Math.max(groundAt(fluffy.position.x, fluffy.position.z), 0.3)   // stone top, gaps included
+    : groundAt(fluffy.position.x, fluffy.position.z);
   // ponytail: the hop lifted the old procedural legs off the ground; the GLB rig has real
   // clips, so hopping it just bounces the whole cat while it stands.
   const fHop = inBoat || fluffy.userData.tux ? 0
