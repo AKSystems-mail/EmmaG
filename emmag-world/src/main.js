@@ -777,7 +777,8 @@ const col = new THREE.Color();
 // ------------------------------------------------------- the giant's clearing
 // He is a landmark, not more scenery: flat dry ground, well off the trail, clear of
 // every pond, stream and cave mouth — and nothing scattered inside the ring round him.
-const GIANT_CLEAR = 18;    // metres kept bare
+const GIANT_CLEAR = 18;    // metres kept clear of everything taller than a flower
+const GIANT_BIG = new Set(['tree', 'rock', 'bush', 'crystal']);   // flowers, tufts, grass, mush stay
 const GIANT_R = 3.4;       // his collision circle
 let GIANT_AT = null;
 function giantClear(x, z) {
@@ -852,9 +853,10 @@ function genChunk(cx, cz) {
       s: 0.75 + rnd() * 0.5, r: rnd() * 6.283, tone: rnd() });
   }
   if (rnd() < 0.5) add('mush', 1 + Math.floor(rnd() * 3), 0.8, 1.3);
-  // his clearing stays bare: no tree, rock, flower, tuft or grass inside the ring
+  // only the big stuff keeps out: the focus is him, not a mown ring
   const gs = giantAt();
-  return { cx, cz, nodes: nodes.filter((n) => Math.hypot(n.x - gs.x, n.z - gs.z) >= GIANT_CLEAR) };
+  return { cx, cz, nodes: nodes.filter((n) =>
+    !GIANT_BIG.has(n.type) || Math.hypot(n.x - gs.x, n.z - gs.z) >= GIANT_CLEAR) };
 }
 
 function rebuild() {
@@ -6688,7 +6690,8 @@ if (DBG) window.__w = {
     cave: +(() => { const cx = Math.round(giant.x / R), cz = Math.round(giant.z / R); let m = 1e9;
       for (let rx = cx - 1; rx <= cx + 1; rx++) for (let rz = cz - 1; rz <= cz + 1; rz++) { const c = caveFor(rx, rz);
         if (c) m = Math.min(m, Math.hypot(c.x - giant.x, c.z - giant.z)); } return m; })().toFixed(1),
-    near: +Math.min(1e9, ...[...chunks.values()].flatMap((c) => c.nodes).map((q) => Math.hypot(q.x - giant.x, q.z - giant.z))).toFixed(1),
+    near: +Math.min(1e9, ...[...chunks.values()].flatMap((c) => c.nodes).filter((q) =>
+      GIANT_BIG.has(q.type)).map((q) => Math.hypot(q.x - giant.x, q.z - giant.z))).toFixed(1),
     box: (() => { const b = new THREE.Box3().setFromObject(giant.g); return [b.min.toArray().map((v) => +v.toFixed(1)), b.max.toArray().map((v) => +v.toFixed(1))]; })(),
   } : null),
   giantWake: () => {
