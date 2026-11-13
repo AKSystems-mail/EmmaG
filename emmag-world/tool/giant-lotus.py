@@ -292,6 +292,14 @@ def build_sleeping_giant(out_glb, preview_dir=None):
             subdivisions=2,
             noise_amp=0.02,
         )
+        for k in range(3):
+            add_icosphere_scaled(
+                bm_giant,
+                center=(-side * 1.48 + side * (k - 1) * 0.21, -2.02 + y_off, 0.87),
+                scale_vec=(0.10, 0.13, 0.085),
+                subdivisions=1,
+                noise_amp=0.0,
+            )
 
     # 4. Arms & Hands
     # Upper Arm Diameter ~0.9m (r=0.45), Forearm Diameter ~0.75m (r=0.375), Hand Length ~1.1m
@@ -312,20 +320,36 @@ def build_sleeping_giant(out_glb, preview_dir=None):
         ]
         add_lofted_tube(bm_giant, forearm_pts, segments=12, cap_ends=True, noise_amp=0.02)
 
-        # Hand: ~1.1m length resting on thigh/shin
+        # Hand: palm on the shin, four fingers curled over the edge, one thumb
         hand_center = Vector((side * 0.72, -1.68, 1.66))
         add_icosphere_scaled(
             bm_giant,
             center=hand_center,
-            scale_vec=(0.55, 0.30, 0.20),  # 2*0.55 = 1.1m length
+            scale_vec=(0.44, 0.34, 0.18),
             rot_euler=(0.25, side * -0.22, side * 0.55),
             subdivisions=2,
             noise_amp=0.015,
         )
+        for k in range(4):
+            fx = -0.30 + 0.20 * k
+            add_lofted_tube(bm_giant, [
+                (Vector((hand_center.x + fx, hand_center.y - 0.20, hand_center.z + 0.03)), 0.085, 0.080),
+                (Vector((hand_center.x + fx * 1.08, hand_center.y - 0.46, hand_center.z - 0.03)), 0.078, 0.072),
+                (Vector((hand_center.x + fx * 1.12, hand_center.y - 0.64, hand_center.z - 0.12)), 0.062, 0.058),
+            ], segments=8, cap_ends=True, noise_amp=0.01)
+        add_lofted_tube(bm_giant, [
+            (Vector((hand_center.x - side * 0.34, hand_center.y - 0.10, hand_center.z + 0.03)), 0.095, 0.090),
+            (Vector((hand_center.x - side * 0.46, hand_center.y - 0.32, hand_center.z - 0.04)), 0.072, 0.068),
+        ], segments=8, cap_ends=True, noise_amp=0.01)
 
     # 5. Head (Dimensions ~1.6H x 1.3W x 1.5D, slumped forward)
-    head_center = Vector((0.0, -0.78, 6.08))
-    head_rot = (math.radians(26.0), 0.0, 0.0)
+    head_center = Vector((0.0, -0.84, 6.00))
+    head_rot = (math.radians(36.0), 0.0, 0.0)
+    HRM = Euler(head_rot, "XYZ").to_matrix()
+
+    def head_world(local):
+        # props on the skull are placed in head space so a deeper bow carries them
+        return head_center + HRM @ Vector(local)
     head_verts = add_icosphere_scaled(
         bm_giant,
         center=head_center,
@@ -342,23 +366,23 @@ def build_sleeping_giant(out_glb, preview_dir=None):
         # Front of face is local -Y
         if local.y < -0.35:
             # Flatten cheeks/face slightly
-            local.y *= 0.88
+            local.y *= 0.92
             # Brow ridge
             if 0.14 < local.z < 0.34 and abs(local.x) < 0.44:
-                local.y -= 0.06
+                local.y -= 0.11
             # Nose bridge & tip
             if -0.15 < local.z < 0.22 and abs(local.x) < 0.13:
                 nose_factor = 1.0 - (abs(local.x) / 0.13)
-                local.y -= 0.13 * nose_factor * (0.28 - local.z) * 2.0
+                local.y -= 0.20 * nose_factor * (0.28 - local.z) * 2.0
             # Recessed shut-eye slits
             if 0.02 < local.z < 0.12 and 0.14 < abs(local.x) < 0.40:
-                local.y += 0.055
+                local.y += 0.085
             # Relaxed mouth slit
             if -0.36 < local.z < -0.26 and abs(local.x) < 0.22:
-                local.y += 0.045
+                local.y += 0.065
             # Jaw / chin definition
             if local.z < -0.36 and abs(local.x) < 0.34:
-                local.y -= 0.03
+                local.y -= 0.05
         v.co = head_center + (Euler(head_rot, "XYZ").to_matrix() @ local)
 
     # Low-poly ears
@@ -390,9 +414,13 @@ def build_sleeping_giant(out_glb, preview_dir=None):
 
         # Moss patches on shoulders, upper back, and head crown
         is_shoulder_moss = (
-            c.z > 4.65 and c.z < 5.45 and n.z > 0.38
-            and (abs(c.x) > 0.65 or c.y > 0.1)
-            and noise.noise(c * 1.6) > -0.12
+            c.z > 4.30 and c.z < 5.55 and n.z > 0.22
+            and (abs(c.x) > 0.55 or c.y > 0.1)
+            and noise.noise(c * 1.6) > -0.30
+        )
+        is_back_moss = (
+            c.y > 0.30 and c.z > 2.20 and n.y > 0.20
+            and noise.noise(c * 1.3) > -0.05
         )
         is_head_moss = (
             c.z > 6.45 and n.z > 0.35
@@ -402,7 +430,7 @@ def build_sleeping_giant(out_glb, preview_dir=None):
 
         if is_eye_zone or is_mouth_zone or is_deep_underside:
             poly.material_index = 1  # Dusty Violet Shadow
-        elif is_head_moss or is_shoulder_moss:
+        elif is_head_moss or is_shoulder_moss or is_back_moss:
             poly.material_index = 4 if noise.noise(c * 3.0) > 0.15 else 3
         elif is_belly_lichen or is_shin_lichen:
             poly.material_index = 2  # Pale Cream Lichen
@@ -470,9 +498,9 @@ def build_sleeping_giant(out_glb, preview_dir=None):
     # --------------------------------------------------------------------------
     bm_mush = bmesh.new()
     mush_specs = [
-        (Vector((0.46, -0.45, 6.62)), (0.2, 0.35, 0.0), 1.0),
-        (Vector((0.55, -0.56, 6.52)), (0.35, 0.55, 0.2), 0.72),
-        (Vector((0.36, -0.35, 6.70)), (0.15, 0.22, -0.2), 0.58),
+        (head_world((0.46, 0.533, 0.341)), (0.2, 0.35, 0.0), 1.0),
+        (head_world((0.55, 0.391, 0.299)), (0.35, 0.55, 0.2), 0.72),
+        (head_world((0.36, 0.658, 0.369)), (0.15, 0.22, -0.2), 0.58),
     ]
     for mpos, mrot, mscl in mush_specs:
         mr = Euler(mrot, "XYZ").to_matrix().to_4x4()
@@ -497,9 +525,9 @@ def build_sleeping_giant(out_glb, preview_dir=None):
     # Wildflower/moss tufts on head crown
     bm_head_tufts = bmesh.new()
     tuft_spots = [
-        Vector((-0.05, -0.68, 6.84)),
-        Vector((-0.26, -0.78, 6.72)),
-        Vector((0.18, -0.58, 6.80)),
+        head_world((-0.05, 0.423, 0.639)),
+        head_world((-0.26, 0.281, 0.575)),
+        head_world((0.18, 0.495, 0.559)),
     ]
     for tp in tuft_spots:
         for _ in range(4):
@@ -580,8 +608,7 @@ def build_sleeping_giant(out_glb, preview_dir=None):
     # --------------------------------------------------------------------------
     # 4b. EYES AS SEPARATE NODES -- the game opens and closes them by name
     # --------------------------------------------------------------------------
-    HEAD_C = Vector((0.0, -0.78, 6.08))
-    HRM = Euler((math.radians(26.0), 0.0, 0.0), "XYZ").to_matrix()
+    HEAD_C = head_center
 
     def to_final(p):
         return Vector(((p.x - cx) * scale_factor, (p.y - cy) * scale_factor, (p.z - min_z) * scale_factor))

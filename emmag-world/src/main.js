@@ -2539,6 +2539,8 @@ let paintColor = PAINT_COLORS[0], painting = false;
 // like someone sitting down, or he is a boulder with a face on top.
 let giant = null;
 const GIANT_GREEN = 0x9fe6b8;
+// pale plate seams over the stone, the way the concept sheet draws him
+const GIANT_SEAM = new THREE.LineBasicMaterial({ color: 0xcfd8e3, transparent: true, opacity: 0.10, depthWrite: false });
 function ensureGiant() {
   if (giant) return;
   // a giant nobody can find is scenery: he sits a couple of chunks out, not five
@@ -2558,7 +2560,10 @@ function ensureGiant() {
       o.castShadow = true; o.frustumCulled = false;
       if (/^Eye/.test(o.name)) giant.eyes.push(o);
       const mm = o.material;
-      if (mm && /Stone/.test(mm.name) && !giant.stone.includes(mm)) giant.stone.push(mm);
+      if (mm && /Stone/.test(mm.name)) {
+        if (!giant.stone.includes(mm)) giant.stone.push(mm);
+        o.add(new THREE.LineSegments(new THREE.WireframeGeometry(o.geometry), GIANT_SEAM));
+      }
     });
     g.add(m.scene);
     if (giant.awake) for (const mm of giant.stone) mm.color.set(GIANT_GREEN);
@@ -4270,7 +4275,7 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
   halo.scale.set(3.2, 3.2, 1);
   halo.position.y = 2.0;
   const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 1.1, 4.4, 12, 1, true),
-    new THREE.MeshBasicMaterial({ color: 0xffcf8a, transparent: true, opacity: 0.13, depthWrite: false,
+    new THREE.MeshBasicMaterial({ color: 0xffcf8a, transparent: true, opacity: 0.10, depthWrite: false,
       blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false }));
   shaft.position.y = 2.2;
   const shineL = new THREE.PointLight(0xffc978, K.glow === 0 ? 0 : 2.2, 11, 2);
