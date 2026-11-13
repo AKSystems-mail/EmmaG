@@ -2541,7 +2541,7 @@ let paintColor = PAINT_COLORS[0], painting = false;
 let giant = null;
 const GIANT_GREEN = 0x9fe6b8;
 // pale plate seams over the stone, the way the concept sheet draws him
-const GIANT_SEAM = new THREE.LineBasicMaterial({ color: 0xcfd8e3, transparent: true, opacity: 0.10, depthWrite: false });
+const GIANT_SEAM = new THREE.LineBasicMaterial({ color: 0xdfe7f0, transparent: true, opacity: 0.18, depthWrite: false });
 function ensureGiant() {
   if (giant) return;
   // a giant nobody can find is scenery: he sits a couple of chunks out, not five

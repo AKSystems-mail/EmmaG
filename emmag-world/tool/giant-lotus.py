@@ -233,11 +233,11 @@ def build_sleeping_giant(out_glb, preview_dir=None):
     # 2. Slumped Torso: Width ~3.4m (rx=1.70), Belly Depth ~2.6m (ry=1.30)
     torso_profile = [
         (Vector((0.0,  0.18, 1.45)), 1.10, 0.94),
-        (Vector((0.0,  0.02, 2.35)), 1.22, 1.04),  # Belly
-        (Vector((0.0, -0.10, 3.35)), 1.28, 1.02),  # Lower chest
-        (Vector((0.0, -0.18, 4.35)), 1.24, 0.96),  # Upper chest
-        (Vector((0.0, -0.22, 5.10)), 1.04, 0.78),  # Shoulders
-        (Vector((0.0, -0.30, 5.52)), 0.62, 0.54),  # Neck base
+        (Vector((0.0,  0.06, 2.35)), 1.22, 1.04),  # Belly
+        (Vector((0.0, -0.16, 3.35)), 1.28, 1.02),  # Lower chest
+        (Vector((0.0, -0.36, 4.35)), 1.24, 0.96),  # Upper chest, rolled forward
+        (Vector((0.0, -0.52, 5.10)), 1.04, 0.78),  # Shoulders, ahead of the waist
+        (Vector((0.0, -0.66, 5.52)), 0.62, 0.54),  # Neck base, thrust forward
     ]
     add_lofted_tube(bm_giant, torso_profile, segments=28, cap_ends=True, noise_amp=0.04, noise_freq=1.0)
 
@@ -246,9 +246,9 @@ def build_sleeping_giant(out_glb, preview_dir=None):
     # proud ridge instead reads as a slit, so this stays wide and inside the body
     for side in (-1.0, 1.0):
         trap_pts = [
-            (Vector((side * 0.26, -0.26, 5.44)), 0.50, 0.45),
-            (Vector((side * 0.88, -0.22, 5.22)), 0.55, 0.49),
-            (Vector((side * 1.40, -0.17, 4.90)), 0.62, 0.57),
+            (Vector((side * 0.26, -0.62, 5.44)), 0.50, 0.45),
+            (Vector((side * 0.88, -0.50, 5.22)), 0.55, 0.49),
+            (Vector((side * 1.40, -0.34, 4.90)), 0.62, 0.57),
         ]
         add_lofted_tube(bm_giant, trap_pts, segments=14, cap_ends=True, noise_amp=0.02)
 
@@ -256,7 +256,7 @@ def build_sleeping_giant(out_glb, preview_dir=None):
     for side in (-1.0, 1.0):
         add_icosphere_scaled(
             bm_giant,
-            center=(side * 1.40, -0.16, 4.84),
+            center=(side * 1.40, -0.34, 4.84),
             scale_vec=(0.60, 0.58, 0.52),
             rot_euler=(0.15, side * -0.25, 0.0),
             subdivisions=3,
@@ -267,9 +267,9 @@ def build_sleeping_giant(out_glb, preview_dir=None):
     # shows. One taper from the deltoid centre down the arm makes it continuous
     for side in (-1.0, 1.0):
         sleeve_pts = [
-            (Vector((side * 1.42, -0.16, 4.86)), 0.60, 0.57),
-            (Vector((side * 1.66, -0.26, 4.30)), 0.52, 0.50),
-            (Vector((side * 1.80, -0.36, 3.78)), 0.46, 0.45),
+            (Vector((side * 1.42, -0.34, 4.86)), 0.60, 0.57),
+            (Vector((side * 1.66, -0.42, 4.30)), 0.52, 0.50),
+            (Vector((side * 1.80, -0.48, 3.78)), 0.46, 0.45),
         ]
         add_lofted_tube(bm_giant, sleeve_pts, segments=16, cap_ends=True, noise_amp=0.02)
 
@@ -329,8 +329,8 @@ def build_sleeping_giant(out_glb, preview_dir=None):
     for side in (-1.0, 1.0):
         # Upper Arm: Shoulder -> Elbow
         upper_arm_pts = [
-            (Vector((side * 1.55, -0.15, 4.78)), 0.46, 0.45),
-            (Vector((side * 1.82, -0.35, 3.85)), 0.45, 0.44),
+            (Vector((side * 1.55, -0.34, 4.78)), 0.46, 0.45),
+            (Vector((side * 1.82, -0.46, 3.85)), 0.45, 0.44),
             (Vector((side * 1.92, -0.62, 3.05)), 0.42, 0.41),
         ]
         add_lofted_tube(bm_giant, upper_arm_pts, segments=18, cap_ends=True, noise_amp=0.025)
@@ -364,18 +364,19 @@ def build_sleeping_giant(out_glb, preview_dir=None):
             subdivisions=4,
             noise_amp=0.015,
         )
+        # the thumb is one lobe of the mitten, not a part stuck to it
         add_icosphere_scaled(
             bm_giant,
-            center=(hand_center.x - side * 0.30, hand_center.y - 0.18, hand_center.z + 0.05),
-            scale_vec=(0.17, 0.26, 0.14),
-            rot_euler=(0.20, side * -0.15, side * 0.45),
+            center=(hand_center.x - side * 0.26, hand_center.y - 0.20, hand_center.z + 0.02),
+            scale_vec=(0.26, 0.32, 0.17),
+            rot_euler=(0.18, side * -0.12, side * 0.30),
             subdivisions=4,
             noise_amp=0.01,
         )
 
     # 5. Head (Dimensions ~1.6H x 1.3W x 1.5D, slumped forward)
-    head_center = Vector((0.0, -0.84, 6.00))
-    head_rot = (math.radians(36.0), 0.0, 0.0)
+    head_center = Vector((0.0, -1.02, 5.94))
+    head_rot = (math.radians(46.0), 0.0, 0.0)
     HRM = Euler(head_rot, "XYZ").to_matrix()
 
     def head_world(local):
@@ -474,7 +475,7 @@ def build_sleeping_giant(out_glb, preview_dir=None):
     # --------------------------------------------------------------------------
     # C. BIRD'S NEST + 3 EGGS ON GIANT'S LEFT SHOULDER (+X)
     # --------------------------------------------------------------------------
-    nest_pos = Vector((1.42, -0.16, 5.38))
+    nest_pos = Vector((1.42, -0.44, 5.38))
     nest_rot = (0.12, 0.18, 0.0)
     bm_nest = bmesh.new()
 
