@@ -584,6 +584,15 @@ const Scatter = () => {
   if (reedMesh) scatter(reeds, [reedMesh], 420);
   if (bloomPools) scatter(blooms, bloomPools);
 };
+// the trail's centreline (same formula the ground shader paints): the paving and
+// the giant's clearing check both measure from it
+const trailLane = (k, z) => 65 + 47 * k - 11 * Math.sin(z * 0.019) - 4 * Math.sin(z * 0.047 + 1.7)
+  - 4 * Math.sin(z * 0.06) - 1.5 * Math.sin(z * 0.017);
+const trailDist = (x, z) => {
+  let m = 1e9;
+  for (let k = -6; k <= 14; k++) m = Math.min(m, Math.abs(x - trailLane(k, z)));
+  return m;
+};
 // river stones worn into the painted trail: sparse, instanced, one tile wide
 function paveTrails(px, pz) {
   if (!trailMesh) return;
@@ -591,8 +600,7 @@ function paveTrails(px, pz) {
   trailAt.x = px; trailAt.z = pz;
   // the ground shader's centreline: x + 11 sin(.019z) + 4 sin(.047z+1.7) walked
   // 15 m off a 47 m repeat, then shoved by 4 sin(.06z) + 1.5 sin(.017z)
-  const lane = (k, z) => 65 + 47 * k - 11 * Math.sin(z * 0.019) - 4 * Math.sin(z * 0.047 + 1.7)
-    - 4 * Math.sin(z * 0.06) - 1.5 * Math.sin(z * 0.017);
+  const lane = trailLane;
   let i = 0;
   const H = 74, STEP = 2.1;
   // the grid is anchored to the world, not to her: tiles must not slide as she walks
@@ -766,6 +774,45 @@ const takenAt = new Map();
 const dummy = new THREE.Object3D();
 const col = new THREE.Color();
 
+// ------------------------------------------------------- the giant's clearing
+// He is a landmark, not more scenery: flat dry ground, well off the trail, clear of
+// every pond, stream and cave mouth — and nothing scattered inside the ring round him.
+const GIANT_CLEAR = 18;    // metres kept bare
+const GIANT_R = 3.4;       // his collision circle
+let GIANT_AT = null;
+function giantClear(x, z) {
+  if (inWater(x, z, GIANT_CLEAR + 2) || hillAt(x, z) > 0.05) return false;
+  if (trailDist(x, z) < GIANT_CLEAR + 3) return false;
+  const cx = Math.round(x / R), cz = Math.round(z / R);
+  for (let rx = cx - 1; rx <= cx + 1; rx++) for (let rz = cz - 1; rz <= cz + 1; rz++) {
+    const q = pondFor(rx, rz);
+    if (q) {
+      if (Math.hypot(q.x - x, q.z - z) < q.r + GIANT_CLEAR) return false;
+      // his clearing must not catch a stream either
+      const [ux, uz] = streamDir(q);
+      const t = Math.min(q.r + 46, Math.max(q.r * 0.7, (x - q.x) * ux + (z - q.z) * uz));
+      if (Math.hypot(x - (q.x + ux * t), z - (q.z + uz * t)) < GIANT_CLEAR) return false;
+    }
+    const c = caveFor(rx, rz);
+    if (c && Math.hypot(c.x - x, c.z - z) < GIANT_CLEAR + 10) return false;
+  }
+  return true;
+}
+function pickGiantSpot() {
+  const cells = [];
+  for (let r = 0; r < 6; r++) for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) {
+    if (Math.max(Math.abs(dx), Math.abs(dz)) === r) cells.push([1 + dx, -1 + dz]);
+  }
+  for (const [rx, rz] of cells) {
+    const s = spot(rx, rz);
+    if (giantClear(s.x, s.z)) { GIANT_AT = s; return s; }
+  }
+  // ponytail: no cell in 121 passed; fall back to the old spot rather than none
+  GIANT_AT = spot(1, -1);
+  return GIANT_AT;
+}
+const giantAt = () => GIANT_AT || pickGiantSpot();
+
 function genChunk(cx, cz) {
   const rnd = mulberry(hash2(cx, cz, save.seed));
   const nodes = [];
@@ -805,7 +852,9 @@ function genChunk(cx, cz) {
       s: 0.75 + rnd() * 0.5, r: rnd() * 6.283, tone: rnd() });
   }
   if (rnd() < 0.5) add('mush', 1 + Math.floor(rnd() * 3), 0.8, 1.3);
-  return { cx, cz, nodes };
+  // his clearing stays bare: no tree, rock, flower, tuft or grass inside the ring
+  const gs = giantAt();
+  return { cx, cz, nodes: nodes.filter((n) => Math.hypot(n.x - gs.x, n.z - gs.z) >= GIANT_CLEAR) };
 }
 
 function rebuild() {
@@ -2103,6 +2152,7 @@ function pushOut(x, z) {
     break;
   }
   for (const lm of landmarks.values()) disc(lm.x, lm.z, 1.95);
+  disc(giantAt().x, giantAt().z, GIANT_R);   // the statue is not scenery
   for (const f of friends.values()) disc(f.g.position.x, f.g.position.z, 0.75);
   // camps: the tent sits on the group origin — its square base is 1.24 wide, so
   // the bubble is that plus her body, or she walks through the canvas
@@ -2546,11 +2596,7 @@ function giantSkin() {
 }
 function ensureGiant() {
   if (giant) return;
-  // a giant nobody can find is scenery: he sits a couple of chunks out, not five
-  const s = spot(1, -1);
-  // ponytail: deterministic drift rather than a spiral search — a pond that
-  // streams in later is handled on the pond side, above
-  for (let i = 0; i < 60 && inWater(s.x, s.z, 8); i++) { const a = i * 2.4; s.x += Math.cos(a) * 5; s.z += Math.sin(a) * 5; }
+  const s = giantAt();                             // his own cleared spot
   const g = new THREE.Group();
   g.position.set(s.x, groundAt(s.x, s.z), s.z);   // feet on the actual ground, not on y=0
   scene.add(g);
@@ -2565,6 +2611,7 @@ function ensureGiant() {
         if (!giant.stone.includes(mm)) giant.stone.push(mm);
       }
     });
+    m.scene.scale.setScalar(1.3);   // 7 m scan -> 9.1 m; the group keeps its breathing
     g.add(m.scene);
     if (giant.awake) giantSkin();
   }, undefined, () => {});
@@ -6024,7 +6071,7 @@ function tick() {
   // aim toward him as she gets close
   if (giant && !inCave) {
     const gd = Math.hypot(giant.x - player.position.x, giant.z - player.position.z);
-    if (gd < 26) lookAt.lerp(giAim.set(giant.x, giant.g.position.y + 4.4, giant.z), (1 - gd / 26) * 0.5);
+    if (gd < 26) lookAt.lerp(giAim.set(giant.x, giant.g.position.y + 5.7, giant.z), (1 - gd / 26) * 0.5);
   }
   const off = new THREE.Vector3(
     Math.sin(camYaw) * Math.cos(camPitch),
@@ -6630,9 +6677,18 @@ if (DBG) window.__w = {
     }
     return out;
   },
-  giantGo: (back = 16) => { ensureGiant(); player.position.set(giant.x, 0, giant.z + back); return { x: giant.x, z: giant.z }; },
+  giantGo: (back = 22) => { ensureGiant(); player.position.set(giant.x, 0, giant.z + back); return { x: giant.x, z: giant.z }; },
   giantInfo: () => (giant ? {
     awake: giant.awake, n: giant.n, skin: giant.stone[0] ? '#' + giant.stone[0].color.getHexString() : '-',
+    at: [+giant.x.toFixed(1), +giant.z.toFixed(1)],
+    trail: +trailDist(giant.x, giant.z).toFixed(1),
+    pond: +(() => { const cx = Math.round(giant.x / R), cz = Math.round(giant.z / R); let m = 1e9;
+      for (let rx = cx - 1; rx <= cx + 1; rx++) for (let rz = cz - 1; rz <= cz + 1; rz++) { const q = pondFor(rx, rz);
+        if (q) m = Math.min(m, Math.hypot(q.x - giant.x, q.z - giant.z) - q.r); } return m; })().toFixed(1),
+    cave: +(() => { const cx = Math.round(giant.x / R), cz = Math.round(giant.z / R); let m = 1e9;
+      for (let rx = cx - 1; rx <= cx + 1; rx++) for (let rz = cz - 1; rz <= cz + 1; rz++) { const c = caveFor(rx, rz);
+        if (c) m = Math.min(m, Math.hypot(c.x - giant.x, c.z - giant.z)); } return m; })().toFixed(1),
+    near: +Math.min(1e9, ...[...chunks.values()].flatMap((c) => c.nodes).map((q) => Math.hypot(q.x - giant.x, q.z - giant.z))).toFixed(1),
     box: (() => { const b = new THREE.Box3().setFromObject(giant.g); return [b.min.toArray().map((v) => +v.toFixed(1)), b.max.toArray().map((v) => +v.toFixed(1))]; })(),
   } : null),
   giantWake: () => {
