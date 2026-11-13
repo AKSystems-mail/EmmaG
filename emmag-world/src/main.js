@@ -781,21 +781,21 @@ const GIANT_CLEAR = 18;    // metres kept clear of everything taller than a flow
 const GIANT_BIG = new Set(['tree', 'rock', 'bush', 'crystal']);   // flowers, tufts, grass, mush stay
 const GIANT_R = 3.4;       // his collision circle
 let GIANT_AT = null;
-function giantClear(x, z) {
-  if (inWater(x, z, GIANT_CLEAR + 2) || hillAt(x, z) > 0.05) return false;
+function giantClear(x, z, wet) {
+  if (inWater(x, z, wet) || hillAt(x, z) > 0.05) return false;
   if (trailDist(x, z) < GIANT_CLEAR + 3) return false;
   const cx = Math.round(x / R), cz = Math.round(z / R);
   for (let rx = cx - 1; rx <= cx + 1; rx++) for (let rz = cz - 1; rz <= cz + 1; rz++) {
     const q = pondFor(rx, rz);
     if (q) {
-      if (Math.hypot(q.x - x, q.z - z) < q.r + GIANT_CLEAR) return false;
+      if (Math.hypot(q.x - x, q.z - z) < q.r + wet) return false;
       // his clearing must not catch a stream either
       const [ux, uz] = streamDir(q);
       const t = Math.min(q.r + 46, Math.max(q.r * 0.7, (x - q.x) * ux + (z - q.z) * uz));
-      if (Math.hypot(x - (q.x + ux * t), z - (q.z + uz * t)) < GIANT_CLEAR) return false;
+      if (Math.hypot(x - (q.x + ux * t), z - (q.z + uz * t)) < wet) return false;
     }
     const c = caveFor(rx, rz);
-    if (c && Math.hypot(c.x - x, c.z - z) < GIANT_CLEAR + 10) return false;
+    if (c && Math.hypot(c.x - x, c.z - z) < wet + 10) return false;
   }
   return true;
 }
@@ -804,9 +804,10 @@ function pickGiantSpot() {
   for (let r = 0; r < 6; r++) for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) {
     if (Math.max(Math.abs(dx), Math.abs(dz)) === r) cells.push([1 + dx, -1 + dz]);
   }
-  for (const [rx, rz] of cells) {
+  // wants 45 m from any water or cave, settles for 30, then the ring minimum
+  for (const wet of [45, 30, GIANT_CLEAR]) for (const [rx, rz] of cells) {
     const s = spot(rx, rz);
-    if (giantClear(s.x, s.z)) { GIANT_AT = s; return s; }
+    if (giantClear(s.x, s.z, wet)) { GIANT_AT = s; return s; }
   }
   // ponytail: no cell in 121 passed; fall back to the old spot rather than none
   GIANT_AT = spot(1, -1);
