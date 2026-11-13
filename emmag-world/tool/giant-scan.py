@@ -28,9 +28,9 @@ PREVIEW = arg("--preview-dir", "preview_scan")
 TEX = arg("--tex", "public/models/giant_stone.png")
 FACING = float(arg("--facing", "0"))      # extra Z spin, degrees
 HEIGHT = 7.0
-TARGET_TRIS = 6024
-GIRL = Vector((-0.900, -0.125, -0.080))
-GIRL_R = 0.115
+PICK = arg("--pick", "largest")          # 'largest' or a triangle count
+DECIMATE = int(arg("--decimate", "18000"))
+GIRL = arg("--girl")                     # "x,y,z,r" when the girl is welded in
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=SRC)
@@ -43,20 +43,26 @@ bpy.ops.mesh.separate(type='LOOSE')
 bpy.ops.object.mode_set(mode='OBJECT')
 
 parts = [o for o in bpy.context.scene.objects if o.type == 'MESH']
-giant = min(parts, key=lambda p: abs(len(p.data.polygons) - TARGET_TRIS))
+if PICK == "largest":
+    giant = max(parts, key=lambda p: len(p.data.polygons))
+else:
+    giant = min(parts, key=lambda p: abs(len(p.data.polygons) - int(PICK)))
 for p in parts:
     if p is not giant:
         bpy.data.objects.remove(p, do_unlink=True)
 print("[Giant] picked", len(giant.data.polygons), "tris")
 
 # --- cut the girl and anything thinner than a shard ------------------------
-bm = bmesh.new()
-bm.from_mesh(giant.data)
-kill = [f for f in bm.faces if (f.calc_center_median() - GIRL).length < GIRL_R]
-bmesh.ops.delete(bm, geom=kill, context='FACES')
-bm.to_mesh(giant.data)
-bm.free()
-print("[Giant] girl faces removed:", len(kill))
+if GIRL:
+    gx, gy, gz, gr = (float(v) for v in GIRL.split(","))
+    gm = Vector((gx, gy, gz))
+    bm = bmesh.new()
+    bm.from_mesh(giant.data)
+    kill = [f for f in bm.faces if (f.calc_center_median() - gm).length < gr]
+    bmesh.ops.delete(bm, geom=kill, context='FACES')
+    bm.to_mesh(giant.data)
+    bm.free()
+    print("[Giant] girl faces removed:", len(kill))
 
 bpy.context.view_layer.objects.active = giant
 bpy.ops.object.mode_set(mode='EDIT')
@@ -132,7 +138,7 @@ bm.free()
 bm = bmesh.new()
 bm.from_mesh(giant.data)
 zs = [v.co.z for v in bm.verts]
-cut = min(zs) + (max(zs) - min(zs)) * 0.10
+cut = min(zs) + (max(zs) - min(zs)) * 0.03   # trim the scan's ragged bottom only
 res = bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:],
                              plane_co=(0, 0, cut), plane_no=(0, 0, 1),
                              clear_inner=True)
@@ -155,6 +161,13 @@ for p in parts:
         bpy.data.objects.remove(p, do_unlink=True)
 bpy.context.view_layer.objects.active = giant
 print("[Giant] after shard cleanup", len(giant.data.polygons), "tris")
+
+# --- decimate to a game budget -------------------------------------------
+if DECIMATE and len(giant.data.polygons) > DECIMATE:
+    mod = giant.modifiers.new("dec", 'DECIMATE')
+    mod.ratio = DECIMATE / len(giant.data.polygons)
+    bpy.ops.object.modifier_apply(modifier=mod.name)
+    print("[Giant] decimated to", len(giant.data.polygons), "tris")
 
 # --- orient, scale, sit on the ground --------------------------------------
 bpy.ops.object.select_all(action='DESELECT')
