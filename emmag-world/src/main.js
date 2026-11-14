@@ -6105,10 +6105,11 @@ function tick() {
         : FU.clip === 'Walk' ? Math.abs(Math.sin(fPh)) * 0.014
         : 0;                                   // at rest the Idle clip breathes on its own
     }
-    // the rig has one tail bone, so the loose sway of the old Fluffy is added on top
+    // the rig has one tail bone, so the gait lift and the loose sway go on top of the clip
     if (FU.tail) {
-      FU.tail.quaternion.multiply(_qz.setFromAxisAngle(_AZ, Math.sin(performance.now() * 0.0017) * 0.14));
-      FU.tail.quaternion.multiply(_qx.setFromAxisAngle(_AX, Math.sin(performance.now() * 0.0023) * 0.07));
+      const w = performance.now() * 0.001, still = 1 - Math.min(1, catLie);
+      FU.tail.quaternion.multiply(_qz.setFromAxisAngle(_AZ, Math.sin(w * 1.7) * 0.14 * still));
+      FU.tail.quaternion.multiply(_qx.setFromAxisAngle(_AX, tailA * 0.26 + Math.sin(w * 2.3) * 0.07 * still));
     }
   }
   if (FU.bones) {
@@ -6138,11 +6139,13 @@ function tick() {
   // tail: lifts when she moves, waves when she stops.  No chain sim needed now
   // that five bones can carry the curl.
   const wantTail = petT > 0 ? 1 : THREE.MathUtils.clamp((catSpd - 1.1) / 3.2, 0, 1);
-  [tailA, tailV] = spring(tailA, tailV, wantTail, 26, 9, dt);
+  // up eagerly with the gait, down gently once she stops (k 6 / d 8 is overdamped: ~1 s fall)
+  [tailA, tailV] = spring(tailA, tailV, wantTail, wantTail > tailA ? 26 : 6, 8, dt);
   if (FU.bones) {
     for (let i = 0; i < FU.tail.length; i++) {
-      const lift = tailA * 0.30 - 0.45 * catLie + Math.sin(t * 1.5 + i * 0.6) * 0.035;
-      const swish = Math.sin(t * 2.2 - i * 0.8) * (0.05 + 0.10 * tailA);
+      const still = 1 - Math.min(1, catLie);   // a loafing cat holds the tail still
+      const lift = tailA * 0.30 - 0.45 * catLie + Math.sin(t * 1.5 + i * 0.6) * 0.035 * still;
+      const swish = Math.sin(t * 2.2 - i * 0.8) * (0.05 + 0.10 * tailA) * still;
       FU.tail[i].quaternion.copy(FU.tailRest[i])
         .multiply(_qx.setFromAxisAngle(_AX, lift))
         .multiply(_qz.setFromAxisAngle(_AZ, swish));
