@@ -5772,8 +5772,9 @@ function finishSkips() {
   m.position.y = 1.0;
   scene.add(m);
   // the meter sets the throw: a good tap is faster and flatter-facing, so it skips more
-  const spd = 5 + acc * 5.5, up = 1.9 + acc * 2.0;
-  skipStone = { m, v: new THREE.Vector3(d.x * spd, up, d.z * spd), hops: 0 };
+  // acc is the tap: flat and fast skips better, so the bounce keeps more of its speed
+  const spd = 5 + acc * 5.5, up = 1.9 + acc * 2.0, rest = 0.62 + acc * 0.14;
+  skipStone = { m, v: new THREE.Vector3(d.x * spd, up, d.z * spd), hops: 0, rest };
   throwT = 0.35;
   sfx.blip(660, 0.08, 'triangle', 0.1);
 }
@@ -5785,9 +5786,9 @@ function skipTick(dt) {
   s.m.position.addScaledVector(s.v, dt);
   s.m.rotation.x += dt * 9;
   if (s.m.position.y <= 0.075 && s.v.y < 0) {
-    if (s.hops < 9 && s.v.y < -0.7) {
+    if (s.hops < 9 && s.v.y < -0.9) {
       s.hops++;
-      s.v.y *= -0.5; s.v.x *= 0.72; s.v.z *= 0.72;
+      s.v.y *= -s.rest; s.v.x *= 0.66; s.v.z *= 0.66;
       s.m.position.y = 0.078;
       ripple(s.m.position.x, s.m.position.z, 0.7);
       burst(s.m.position.clone().setY(0.12), 0xdff3ff, 4, 0.7);
