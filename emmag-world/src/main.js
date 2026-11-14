@@ -1827,6 +1827,12 @@ function streamB0(pd, ux, uz) {
   return b0;
 }
 
+// the plank deck's profile: 0.5 m over each bank, arch above that at the crown, and
+// the planks run on past the arch until they meet the ground. one formula for the
+// mesh and for the floor she walks on, so the two cannot drift apart again
+const plankY = (along, half, A) => Math.max(0, 0.5 + A * (1 - (along / half) ** 2));
+const plankEnd = (half, A) => half * Math.sqrt(1 + 0.5 / A);
+
 function makePond(pd) {
   const g = new THREE.Group();
   const shore = new THREE.Mesh(new THREE.CircleGeometry(pd.r * 1.06, 28), mat({ color: 0xc0b189 }));
@@ -1852,10 +1858,10 @@ function makePond(pd) {
   }
 
   // the deck arches: 0.5 at each bank, arch above that at the crown
-  const A = pd.arch || 2, half = pd.r + 3, deck = (x) => 0.5 + A * (1 - (x / half) ** 2);
+  const A = pd.arch || 2, half = pd.r + 3, deck = (x) => plankY(x, half, A);
   if (pd.kind === 'bridge') {
   // the deck runs past the arch until it reaches the ground: solve deck(xEnd) = 0
-  const xEnd = half * Math.sqrt(1 + 0.5 / A);
+  const xEnd = plankEnd(half, A);
   for (let i = -Math.ceil(xEnd / 1.1); i <= Math.ceil(xEnd / 1.1); i++) {
     const x = i * 1.1;
     if (Math.abs(x) > xEnd) continue;
@@ -1952,9 +1958,9 @@ const onBridge = (pd, x, z) => {
   const dx = x - pd.x, dz = z - pd.z;
   const along = pd.axis ? dz : dx;
   const across = pd.axis ? dx : dz;
-  const half = pd.r + 3;
-  if (Math.abs(across) >= 1.2 || Math.abs(along) >= half) return 0;
-  return 0.5 + (pd.arch || 2) * (1 - (along / half) ** 2);
+  const half = pd.r + 3, A = pd.arch || 2;
+  if (Math.abs(across) >= 1.2 || Math.abs(along) >= plankEnd(half, A)) return 0;
+  return plankY(along, half, A);
 };
 const inWater = (x, z, pad = 0) => {
   for (const pd of ponds.values()) {
