@@ -5982,7 +5982,7 @@ function tick() {
     arms[1].rotation.x = 0.9 + Math.sin((1 - throwT / 0.35) * Math.PI) * 1.25;
     arms[1].rotation.z = 0.4;
   } else if (inBoat) {
-    arms[0].rotation.x = arms[1].rotation.x = -0.8 + Math.sin(rowPh) * 0.4;
+    arms[0].rotation.x = arms[1].rotation.x = 0.8 - Math.sin(rowPh) * 0.4;
     arms[0].rotation.z = 0.25; arms[1].rotation.z = -0.25;
   }
 
@@ -5990,7 +5990,8 @@ function tick() {
   // pin the elbows at a fixed bend instead
   const { clavs, elbows } = player.userData;
   if (elbows) {
-    if (fishing || throwT > 0 || inBoat) elbowT[0] = elbowT[1] = 0.38;
+    if (fishing || throwT > 0) elbowT[0] = elbowT[1] = 0.38;
+    if (inBoat) elbowT[0] = elbowT[1] = -0.38;
     for (let i = 0; i < 2; i++) {
       elbows[i].rotation.x += (elbowT[i] - elbows[i].rotation.x) * Math.min(1, dt * 14);
       clavs[i].rotation.x = arms[i].rotation.x * 0.3;
@@ -6086,7 +6087,9 @@ function tick() {
   if (FU.mix) {
     // Sit/Loaf clips are hand-baked in Blender (catbake.py) — the shipped ones left the
     // cat standing. Front paws sit at y=0 and the rump lands within 8 mm of the ground.
-    const want = catLie > 0.5 ? 'Loaf' : catSit > 0.5 ? 'Sit'
+    // a boat carries her: no gait, just sit there
+    const want = inBoat ? 'Sit'
+      : catLie > 0.5 ? 'Loaf' : catSit > 0.5 ? 'Sit'
       : catSpd > 4.2 ? 'Trot' : catSpd > 0.3 ? 'Walk' : 'Idle';
     if (want !== FU.clip && FU.acts[want]) {
       const prev = FU.acts[FU.clip], next = FU.acts[want];
