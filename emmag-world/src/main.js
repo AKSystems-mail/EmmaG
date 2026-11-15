@@ -1559,6 +1559,7 @@ function packCamp(c) {
   sfx.gather(1);
   rebuild();
 }
+const collars = [];   // the collar on each camp shelf, rebuilt with the camp
 function makeCamp(x, z, i = 0) {
   // one layout, built on purpose: tent at the back, fire ring in front of it,
   // seats beside the fire, and the smaller things placed around the outside.
@@ -1618,6 +1619,20 @@ function makeCamp(x, z, i = 0) {
     leg.position.set(2.05 + sgn * 0.52 * Math.cos(-0.55), 0.31, 1.65 - sgn * 0.52 * Math.sin(-0.55));
     g.add(leg);
   }
+  // Fluffy's collar waits at the end of the shelf: finish every errand and she
+  // trades places with you. hidden until half the errands are done.
+  const collar = new THREE.Group();
+  collars.push(collar);
+  const band = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.015, 6, 14), mat({ color: 0x2f6fbf }));
+  band.rotation.x = Math.PI / 2;                       // lying flat, like it was set down
+  const cb = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 6), mat({ color: 0xf2c14e, emissive: 0x4a3608, emissiveIntensity: 0.5 }));
+  cb.position.set(0.072, 0.012, 0);                    // the tag sits on the band, not in the hole
+  collar.add(band, cb);
+  collar.position.set(2.05 - 0.45 * Math.cos(0.55), 0.675, 1.65 - 0.45 * Math.sin(0.55));
+  collar.rotation.y = -0.55;
+  g.add(collar);
+  collar.visible = false;
+  queueMicrotask(() => collarTick(true));   // ASKS is declared later in the file; show it once that has run
   for (let k = 0; k < Math.min(8, save.gifts || 0); k++) {
     const sh = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 5), mat({ color: 0xf2d7c0 }));
     sh.scale.set(1.2, 0.6, 1);
@@ -2698,6 +2713,18 @@ const ASKS = {
   ],
 };
 const askAt = (name) => (ASKS[name] || [])[save.quests[name] | 0];   // old saves stored true = one done
+const ERR_TOTAL = Object.values(ASKS).reduce((a, c) => a + c.length, 0);
+const ERR_HALF = Math.ceil(ERR_TOTAL / 2);
+const errandsDone = () => Object.entries(ASKS).reduce((a, [n, c]) => a + Math.min(c.length, save.quests[n] | 0), 0);
+function collarTick(quiet) {
+  const done = errandsDone(), on = done >= ERR_HALF;
+  for (const c of collars) c.visible = on;
+  if (!on || save.collar || quiet) return;
+  save.collar = 1; persist();
+  toast(done >= ERR_TOTAL
+    ? "Fluffy's collar is warm. Fluffy is ready to trade places with you."
+    : `Fluffy's collar — finish all ${ERR_TOTAL} errands and she trades places with you. ${done}/${ERR_TOTAL} so far.`);
+}
 const askReady = (name) => { const s = askAt(name); return !!s && (s.res ? save.res[s.res] >= s.n : STAT[s.stat]() >= s.n); };
 function tryQuest(name) {
   const chain = ASKS[name], i = save.quests[name] | 0, step = askAt(name);
@@ -2721,6 +2748,7 @@ function tryQuest(name) {
   toast(`${name} gives you ${step.gift} ✨${i + 1 < chain.length ? ' — something else is on their mind' : ''}`);
   sfx.restore();
   burst(new THREE.Vector3(player.position.x, 1.4, player.position.z), 0xffe9a8, 24, 3);
+  setTimeout(collarTick, 2600);
   return true;
 }
 
@@ -6560,7 +6588,8 @@ if (DBG) window.__w = {
   // one self-check for the errand chains: 7 steps each, every stat reachable
   asks: () => Object.fromEntries(Object.entries(ASKS).map(([n, c]) =>
     [n, { steps: c.length, vals: c.map((s) => (s.res ? save.res[s.res] : STAT[s.stat]())) }])),
-  give: (name, n) => { save.quests[name] = n; persist(); },
+  give: (name, n) => { save.quests[name] = n; persist(); collarTick(); },
+  collar: () => ({ done: errandsDone(), total: ERR_TOTAL, on: collars.some((c) => c.visible), seen: !!save.collar }),
   cast: () => [...friends.values()].map((f) => ({ name: f.name, met: f.met, q: save.quests[f.name] | 0,
     at: [+f.g.position.x.toFixed(1), +f.g.position.z.toFixed(1)] })),
   addRes: (r, n) => { save.res[r] = (save.res[r] | 0) + n; hud(); persist(); },
