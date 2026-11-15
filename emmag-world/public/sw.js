@@ -1,4 +1,4 @@
-const C = 'emmaworld-v223';
+const C = 'emmaworld-v224';
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys()

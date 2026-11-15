@@ -5355,14 +5355,18 @@ function lifeTick(dt, t) {
     const dx = d.g.position.x - player.position.x, dz = d.g.position.z - player.position.z;
     const dist = Math.hypot(dx, dz) || 1;
     if (d.fed > 0) d.fed -= dt;
-    if (!d.trust && stillT > 4 && dist < 22 && !inCave && !inBoat) {
+    // deer land 32-66 m out, so a 22 m gate meant "stand still and watch nothing happen":
+    // they only noticed someone already close. 34 m covers the whole approach in sight.
+    if (!d.trust && stillT > 2.5 && dist < 34 && !inCave && !inBoat) {
       d.trust = 1;
       if (!deerToast) { deerToast = true; toast('A deer comes closer — stand still'); sfx.blip(660, 0.4, 'sine', 0.07); }
     }
     // a stumble does not spook it — she has to actually walk off
     if (d.trust && pSpd > 0.9) d.walkT = (d.walkT || 0) + dt; else d.walkT = 0;
     if (d.trust && (d.walkT > 0.25 || dist > 26 || inCave || inBoat)) { d.trust = 0; d.walkT = 0; }
-    if (dist < 9 && !(d.trust && pSpd < 2.4)) d.flee = 1.8;
+    // only a player who walks at it spooks it. standing still next to a jumpy deer used to
+    // re-arm the flee every frame, so it could never settle and never notice you
+    if (dist < 9 && pSpd > 0.6 && !(d.trust && pSpd < 2.4)) d.flee = 1.8;
     let tx, tz, want;
     if (d.fed > 0) {   // eating from her hand: stand still, head down
       tx = d.g.position.x; tz = d.g.position.z; want = 0;
@@ -5375,7 +5379,7 @@ function lifeTick(dt, t) {
       const stop = 4.2;
       tx = player.position.x + (dx / dist) * stop;
       tz = player.position.z + (dz / dist) * stop;
-      want = dist > stop + 0.5 ? 1.35 : 0;
+      want = dist > stop + 0.5 ? (dist > 12 ? 2.6 : 1.35) : 0;   // hurry the long walk in, stroll the last bit
     } else {
       d.idle -= dt;
       if (d.idle < 0) {
@@ -6673,6 +6677,7 @@ if (DBG) window.__w = {
     d.g.traverse((o) => { if (o.isBone && bn.length < 6) bn.push([o.name, +o.position.y.toFixed(2), +o.quaternion.x.toFixed(3), +o.quaternion.w.toFixed(3)]); });
     return { spd: d.spd, w: d.w, gy: +d.gy.toFixed(2), y: +d.g.position.y.toFixed(2),
       act: Object.fromEntries(Object.entries(d.A).map(([k, a]) => [k, [+a.getEffectiveWeight().toFixed(2), +a.time.toFixed(2), a.isRunning()]])), bn }; },
+  stillDbg: () => ({ t: +stillT.toFixed(2), px: +pPrevX.toFixed(2), pz: +pPrevZ.toFixed(2) }),
   deerDbg: () => deer.map((d) => ({ k: d.kind, fz: !!d.frozen, fl: +((d.flee) || 0).toFixed(2), id: +(d.idle || 0).toFixed(1), wt: +((d.walkT) || 0).toFixed(2), spd: +d.spd.toFixed(2), tr: d.trust, dist: +Math.hypot(d.g.position.x - player.position.x, d.g.position.z - player.position.z).toFixed(2) })),
   deerWip: (kind = 'doe', x = 0, z = 0, yaw = 0, spd = 1.6) => {
     const d = makeDeer(x, z, kind); d.frozen = 1; d.wip = 1; d.spd = spd; d.ph = 0;
