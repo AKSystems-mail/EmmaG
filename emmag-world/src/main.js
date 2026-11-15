@@ -1305,11 +1305,11 @@ hud();
 
 // ---------------------------------------------------------------- bedtime
 // Emma sleeps at camp from 10:30pm until 5am, local time. ?awake=1 skips it for testing.
-let asleep = false, warnMin = -1;
+let asleep = false, warnMin = -1, sleepWho = '';
 const sleepEl = $('#sleep');
 function checkBedtime(fakeMins) {
-  // a cat does not have a bedtime: playing as Fluffy skips Emma's 10:30pm wall
-  if (asCat) { asleep = false; if (sleepEl) { sleepEl.classList.remove('fadein'); sleepEl.hidden = true; } return; }
+  // Fluffy has a bedtime too — cats sleep at night — the card just tells her side of it
+  const who = asCat ? 'cat' : 'emma';
   const d = new Date();
   const mins = fakeMins ?? (d.getHours() * 60 + d.getMinutes());
   const awake = location.search.includes('awake');
@@ -1317,13 +1317,20 @@ function checkBedtime(fakeMins) {
   // five minutes' notice, then one minute's, so the wall is never a surprise
   if (!bed && !awake && mins >= 22 * 60 + 25 && mins < 22 * 60 + 30 && warnMin !== mins) {
     warnMin = mins;
-    toast(mins >= 22 * 60 + 29 ? 'One more minute, then Emma heads to camp.' : 'Five more minutes, then Emma heads to camp.');
+    toast(mins >= 22 * 60 + 29
+      ? (asCat ? 'One more minute, then Fluffy curls up by the fire.' : 'One more minute, then Emma heads to camp.')
+      : (asCat ? 'Five more minutes, then Fluffy curls up by the fire.' : 'Five more minutes, then Emma heads to camp.'));
   }
-  if (bed === asleep) return;
-  asleep = bed;
+  if (bed === asleep && who === sleepWho) return;
+  asleep = bed; sleepWho = who;
   if (sleepEl) {
-    if (bed) { sleepEl.hidden = false; requestAnimationFrame(() => sleepEl.classList.add('fadein')); }
-    else { sleepEl.classList.remove('fadein'); sleepEl.hidden = true; }
+    if (bed) {
+      sleepEl.querySelector('h2').textContent = asCat ? 'Fluffy is curled up by the fire' : 'Emma Grace is asleep';
+      sleepEl.querySelector('p').textContent = asCat
+        ? 'Cats need their sleep too. Emma is tucked into her tent at camp.'
+        : "She's tucked into her tent at camp. Fluffy is curled up by the fire.";
+      sleepEl.hidden = false; requestAnimationFrame(() => sleepEl.classList.add('fadein'));
+    } else { sleepEl.classList.remove('fadein'); sleepEl.hidden = true; }
   }
   // the wall used to land between gathers and autosave, so the last one was lost
   if (bed) { persist(); input.x = 0; input.y = 0; keys.clear(); }
