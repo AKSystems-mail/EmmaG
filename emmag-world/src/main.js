@@ -3162,7 +3162,9 @@ function updateNear() {
     for (const d of deer) {
       if (d.K) continue;
       const dd = Math.hypot(d.g.position.x - px, d.g.position.z - pz);
-      if (dd < 4.8 && (dd < bd || (best && best.kind === 'camp'))) { bd = dd; best = { kind: 'feed', d }; }
+      // beats a campfire and a cat in the way: Fluffy trails you, so she was stealing the
+      // Feed button every time a deer walked up
+      if (dd < 4.8 && (dd < bd || (best && (best.kind === 'camp' || best.kind === 'pet')))) { bd = dd; best = { kind: 'feed', d }; }
     }
   }
   for (const lm of landmarks.values()) {
@@ -6695,6 +6697,7 @@ if (DBG) window.__w = {
     return { spd: d.spd, w: d.w, gy: +d.gy.toFixed(2), y: +d.g.position.y.toFixed(2),
       act: Object.fromEntries(Object.entries(d.A).map(([k, a]) => [k, [+a.getEffectiveWeight().toFixed(2), +a.time.toFixed(2), a.isRunning()]])), bn }; },
   bed: (m) => { checkBedtime(m); return { asleep, warnMin, hidden: sleepEl.hidden, cls: sleepEl.className, op: +getComputedStyle(sleepEl).opacity }; },
+  nearDbg: () => ({ kind: near && near.kind, cat: +Math.hypot(fluffy.position.x - player.position.x, fluffy.position.z - player.position.z).toFixed(2), d: (near && near.d) ? +Math.hypot(near.d.g.position.x - player.position.x, near.d.g.position.z - player.position.z).toFixed(2) : null, act: actEl.textContent }),
   stillDbg: () => ({ t: +stillT.toFixed(2), px: +pPrevX.toFixed(2), pz: +pPrevZ.toFixed(2) }),
   deerDbg: () => deer.map((d) => ({ k: d.kind, fz: !!d.frozen, fl: +((d.flee) || 0).toFixed(2), id: +(d.idle || 0).toFixed(1), wt: +((d.walkT) || 0).toFixed(2), spd: +d.spd.toFixed(2), tr: d.trust, dist: +Math.hypot(d.g.position.x - player.position.x, d.g.position.z - player.position.z).toFixed(2) })),
   deerWip: (kind = 'doe', x = 0, z = 0, yaw = 0, spd = 1.6) => {
