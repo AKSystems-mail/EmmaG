@@ -157,7 +157,8 @@ body.photo #act, body.photo #photo, body.photo #toast, body.photo #vig { display
 body.photo #shot { display:block; }
 #namebox, #paint, #tp, #sleep { position:fixed; inset:0; display:grid; place-items:center; background:rgba(6,9,22,.6); backdrop-filter:blur(6px); z-index:40; }
 #namebox[hidden], #paint[hidden], #tp[hidden], #sleep[hidden] { display:none; }
-  #sleep { z-index:60; }
+  #sleep { z-index:60; opacity:0; transition:opacity 1.6s ease; }   /* fades in instead of slapping the screen */
+  #sleep.fadein { opacity:1; }
 #nbin { width:100%; padding:12px; border-radius:12px; border:1px solid rgba(183,156,232,.4); background:rgba(0,0,0,.25); color:#fff; font:600 16px system-ui; text-align:center; margin:12px 0; }
 .row { display:flex; gap:8px; justify-content:center; }
 .row button, #bookclose, #pdone, #tpclose { padding:10px 18px; border-radius:12px; border:1px solid rgba(183,156,232,.35); background:rgba(183,156,232,.18); color:#efe6ff; font:700 12px system-ui; }

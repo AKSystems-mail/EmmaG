@@ -1305,21 +1305,31 @@ hud();
 
 // ---------------------------------------------------------------- bedtime
 // Emma sleeps at camp from 10:30pm until 5am, local time. ?awake=1 skips it for testing.
-let asleep = false;
+let asleep = false, warnMin = -1;
 const sleepEl = $('#sleep');
 function checkBedtime(fakeMins) {
   // a cat does not have a bedtime: playing as Fluffy skips Emma's 10:30pm wall
-  if (asCat) { asleep = false; if (sleepEl) sleepEl.hidden = true; return; }
+  if (asCat) { asleep = false; if (sleepEl) { sleepEl.classList.remove('fadein'); sleepEl.hidden = true; } return; }
   const d = new Date();
   const mins = fakeMins ?? (d.getHours() * 60 + d.getMinutes());
-  const bed = (mins >= 22 * 60 + 30 || mins < 5 * 60) && !location.search.includes('awake');
+  const awake = location.search.includes('awake');
+  const bed = (mins >= 22 * 60 + 30 || mins < 5 * 60) && !awake;
+  // five minutes' notice, then one minute's, so the wall is never a surprise
+  if (!bed && !awake && mins >= 22 * 60 + 25 && mins < 22 * 60 + 30 && warnMin !== mins) {
+    warnMin = mins;
+    toast(mins >= 22 * 60 + 29 ? 'One more minute, then Emma heads to camp.' : 'Five more minutes, then Emma heads to camp.');
+  }
   if (bed === asleep) return;
   asleep = bed;
-  if (sleepEl) sleepEl.hidden = !bed;
-  if (bed) { input.x = 0; input.y = 0; keys.clear(); toast('Emma Grace is asleep at camp.'); }
+  if (sleepEl) {
+    if (bed) { sleepEl.hidden = false; requestAnimationFrame(() => sleepEl.classList.add('fadein')); }
+    else { sleepEl.classList.remove('fadein'); sleepEl.hidden = true; }
+  }
+  // the wall used to land between gathers and autosave, so the last one was lost
+  if (bed) { persist(); input.x = 0; input.y = 0; keys.clear(); }
 }
 checkBedtime();
-setInterval(checkBedtime, 30000);
+setInterval(checkBedtime, 5000);   // 30 s was too coarse to land a one-minute warning
 
 $('#mute').onclick = () => {
   sfx.muted = !sfx.muted;
@@ -6677,6 +6687,7 @@ if (DBG) window.__w = {
     d.g.traverse((o) => { if (o.isBone && bn.length < 6) bn.push([o.name, +o.position.y.toFixed(2), +o.quaternion.x.toFixed(3), +o.quaternion.w.toFixed(3)]); });
     return { spd: d.spd, w: d.w, gy: +d.gy.toFixed(2), y: +d.g.position.y.toFixed(2),
       act: Object.fromEntries(Object.entries(d.A).map(([k, a]) => [k, [+a.getEffectiveWeight().toFixed(2), +a.time.toFixed(2), a.isRunning()]])), bn }; },
+  bed: (m) => { checkBedtime(m); return { asleep, warnMin, hidden: sleepEl.hidden, cls: sleepEl.className, op: +getComputedStyle(sleepEl).opacity }; },
   stillDbg: () => ({ t: +stillT.toFixed(2), px: +pPrevX.toFixed(2), pz: +pPrevZ.toFixed(2) }),
   deerDbg: () => deer.map((d) => ({ k: d.kind, fz: !!d.frozen, fl: +((d.flee) || 0).toFixed(2), id: +(d.idle || 0).toFixed(1), wt: +((d.walkT) || 0).toFixed(2), spd: +d.spd.toFixed(2), tr: d.trust, dist: +Math.hypot(d.g.position.x - player.position.x, d.g.position.z - player.position.z).toFixed(2) })),
   deerWip: (kind = 'doe', x = 0, z = 0, yaw = 0, spd = 1.6) => {
