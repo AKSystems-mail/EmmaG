@@ -1216,6 +1216,7 @@ function burst(pos, hex, n = 14, power = 3, up = 1.5) {
 // ---------------------------------------------------------------- inputs
 const input = { x: 0, y: 0 };
 let camYaw = 0, camPitch = 0.52;
+let asCat = false;   // "Play as Fluffy": the cat is the player, Emma waits at camp
 const giAim = new THREE.Vector3();   // scratch: the giant's chest, for the camera aim
 let camDist = 9.6;
 const CAM_MIN = 4, CAM_MAX = 18;
@@ -1307,6 +1308,8 @@ hud();
 let asleep = false;
 const sleepEl = $('#sleep');
 function checkBedtime(fakeMins) {
+  // a cat does not have a bedtime: playing as Fluffy skips Emma's 10:30pm wall
+  if (asCat) { asleep = false; if (sleepEl) sleepEl.hidden = true; return; }
   const d = new Date();
   const mins = fakeMins ?? (d.getHours() * 60 + d.getMinutes());
   const bed = (mins >= 22 * 60 + 30 || mins < 5 * 60) && !location.search.includes('awake');
@@ -2722,8 +2725,8 @@ function collarTick(quiet) {
   if (!on || save.collar || quiet) return;
   save.collar = 1; persist();
   toast(done >= ERR_TOTAL
-    ? "Fluffy's collar is warm. Fluffy is ready to trade places with you."
-    : `Fluffy's collar — finish all ${ERR_TOTAL} errands and she trades places with you. ${done}/${ERR_TOTAL} so far.`);
+    ? "Fluffy's collar is warm. Explore the world as Fluffy."
+    : `Fluffy's collar — finish all ${ERR_TOTAL} errands and you can explore the world as Fluffy. ${done}/${ERR_TOTAL} so far.`);
 }
 const askReady = (name) => { const s = askAt(name); return !!s && (s.res ? save.res[s.res] >= s.n : STAT[s.stat]() >= s.n); };
 function tryQuest(name) {
@@ -6093,6 +6096,12 @@ function tick() {
     fluffy.position.x += (wfx - fluffy.position.x) / fGap * step;
     fluffy.position.z += (wfz - fluffy.position.z) / fGap * step;
   }
+  // as Fluffy, she is not trailing anyone: she stands exactly where the player is
+  if (asCat) {
+    fluffy.position.x = player.position.x;
+    fluffy.position.z = player.position.z;
+    fluffy.rotation.y = player.rotation.y;
+  }
   const fMoved = fWas.distanceTo(fluffy.position);
   const fy = player.rotation.y - fluffy.rotation.y;
   fluffy.rotation.y += (((fy + Math.PI * 3) % (Math.PI * 2)) - Math.PI) * Math.min(1, dt * 7);
@@ -6203,7 +6212,8 @@ function tick() {
   }
 
   // camera: looks where she is heading, and pulls in when a tree gets between
-  lookAt.set(player.position.x, player.position.y + 1.25, player.position.z)
+  const cDist = asCat ? 1.7 : camDist;
+  lookAt.set(player.position.x, player.position.y + (asCat ? 0.24 : 1.25), player.position.z)
     .addScaledVector(dir, Math.min(1.5, vel * 0.22));
   // every other aim in the game is her waist. a 7m statue aimed at from her height
   // has its head above the frame, so she walks up and never sees his face: lift the
@@ -6225,11 +6235,11 @@ function tick() {
   const hit = inCave
     ? (caveRoom ? camRay.intersectObject(caveRoom.g, true).find((h) => h.object.isMesh) : null)
     : camRay.intersectObjects(CAM_SOLID, false)[0];
-  const wantD = hit && hit.distance < camDist ? Math.max(1.4, hit.distance - 0.5) : camDist;
+  const wantD = hit && hit.distance < cDist ? Math.max(asCat ? 0.45 : 1.4, hit.distance - 0.5) : cDist;
   camNear += (wantD - camNear) * Math.min(1, dt * (wantD < camNear ? 16 : 4));
   // squeezed into a doorway the camera has nowhere to stand, so aim over her head
   // instead of straight at the back of it
-  lookAt.y += THREE.MathUtils.clamp(1 - camNear / 7, 0, 1) * 1.6;
+  if (!asCat) lookAt.y += THREE.MathUtils.clamp(1 - camNear / 7, 0, 1) * 1.6;   // cat cam is always close
   camera.position.lerp(lookAt.clone().addScaledVector(off, camNear), 1 - Math.pow(0.0015, dt));
   camera.lookAt(lookAt);
 
@@ -6468,16 +6478,27 @@ refreshChunks(player.position.x, player.position.z, true);
 ensureRegion(Math.floor(player.position.x / R), Math.floor(player.position.z / R));
 renderer.setAnimationLoop(tick);
 
-$('#go').onclick = async () => {
+async function startGame(cat) {
+  asCat = cat;
+  checkBedtime();
+  if (cat) camPitch = 0.22;   // low behind her head, not looking down on her back
   $('#start').remove();
   sfx.start();
   started = true;
+  if (cat) {
+    // Emma stays at camp; hiding the group also hides her sun shadow and the lantern mesh
+    player.visible = false; pShadow.visible = false;
+  }
   try {
     await document.documentElement.requestFullscreen?.();
     await screen.orientation?.lock?.('landscape');
   } catch { /* desktop or refused - fine */ }
-  toast('Fluffy says hi 👋');
-};
+  toast(cat ? 'Fluffy pads off on her own 🐾' : 'Fluffy says hi 👋');
+}
+$('#go').onclick = () => startGame(false);
+$('#catgo').onclick = () => startGame(true);
+// ?cat=1 forces the button on so the mode can be tried before the 28 errands are done
+if (errandsDone() >= ERR_TOTAL || location.search.includes('cat')) $('#catgo').hidden = false;
 
 // install prompt: chrome/edge fire beforeinstallprompt, safari has no such event
 const installBtn = $('#install');
