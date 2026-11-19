@@ -1186,7 +1186,8 @@ const butterflies = Array.from({ length: 6 }, (_, i) => {
   const feeler = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.12, 3), bodyM);
   feeler.position.set(0, 0.04, 0.07); feeler.rotation.x = 1.0;
   g.add(body, feeler);
-  g.userData = { s: Math.random() * 100, bx: (Math.random() - 0.5) * 26, bz: (Math.random() - 0.5) * 26, y: 1.2 + Math.random() * 1.2 };
+  // one of the six stays out after dark so the night is not empty; it is a moth now
+  g.userData = { s: Math.random() * 100, bx: (Math.random() - 0.5) * 26, bz: (Math.random() - 0.5) * 26, y: 1.2 + Math.random() * 1.2, moth: i === 0 };
   scene.add(g);
   return g;
 });
@@ -4845,7 +4846,10 @@ function caveTick(dt, t) {
   }
   // the vault is the one room she has to find: its moonbeam and the gold glow over
   // the box must not light it up from the hall, or it reads as a room already lit
-  const inVault = inRoom(caveRoom.vault, px, pz, 3);
+  // pad 0: the pad used to be 3 m, so the vault's moonbeam and the gold glow over the
+  // box both lit up while she was still standing in the hall doorway — it read as a
+  // room that was already lit instead of one she had just found
+  const inVault = inRoom(caveRoom.vault, px, pz, 0);
   caveRoom.moon.l.visible = inVault;
   caveRoom.moon.beam.visible = inVault;
   caveRoom.shine.visible = inVault && caveRoom.chest.visible;
@@ -5684,12 +5688,26 @@ function startFish() {
   if (fishing) return;
   const q = nearestPond();
   if (!q) return;
+  const face = pondDir(q.pd);
+  // she throws where she is looking: turn her to the water before the rod is read,
+  // or the bobber flies at the pond from over her shoulder. dir is the walk vector,
+  // so a bit of coast left over from the last step cannot turn her back
+  dir.copy(face);
+  player.rotation.y = Math.atan2(face.x, face.z);
   rigRod();
   rodG.visible = true; fishLine.visible = true; bobM.visible = true;
   const { arms } = player.userData;
   arms[1].rotation.x = 1.15;   // +X is forward on these bones; -X swung the rod behind her
-  const land = player.position.clone().addScaledVector(pondDir(q.pd), 4.5).setY(0.07);
-  fishing = { t: 0, phase: 'cast', pd: q.pd, land, from: rodTip(), wait: 1.2 + Math.random() * 1.6, bob: land.clone(), rip: 0 };
+  // 4.5 m of line, but never past the far bank: on a small pond a flat throw off the
+  // dock landed on the grass behind the water
+  const land = player.position.clone().addScaledVector(face, 4.5).setY(0.07);
+  const off = land.clone().sub(new THREE.Vector3(q.pd.x, 0, q.pd.z));
+  if (off.length() > q.pd.r * 0.85) {
+    off.setLength(q.pd.r * 0.85);
+    land.set(q.pd.x + off.x, 0.07, q.pd.z + off.z);
+  }
+  fishing = { t: 0, phase: 'cast', pd: q.pd, land, from: rodTip(), wait: 1.2 + Math.random() * 1.6,
+    bob: land.clone(), rip: 0, cam: player.rotation.y + Math.PI };
   bobM.position.copy(fishing.from);
   lineTo(fishing.from, fishing.from, 0.1);
   actEl.textContent = 'Wait…';
@@ -5699,6 +5717,12 @@ function fishTick(dt) {
   if (!fishing) return;
   const f = fishing;
   f.t += dt;
+  // swing the camera round behind her so the cast reads in frame, without a snap
+  if (f.cam !== null) {
+    const d = ((f.cam - camYaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+    camYaw += d * Math.min(1, dt * 5);
+    if (Math.abs(d) < 0.01) f.cam = null;
+  }
   const tip = rodTip();
   if (f.phase === 'cast') {
     const k = Math.min(1, f.t / 0.5);
@@ -6301,8 +6325,12 @@ function tick() {
     sparkHalo.scale.setScalar((1.7 + pulse * 0.8) * (0.55 + sparkFade * 0.45));
   }
 
+  // butterflies only fly in the sun; the moth is the one that stays up
+  const bFly = dayLight > 0.5;
   for (const b of butterflies) {
     const u = b.userData;
+    b.visible = bFly || u.moth;
+    if (!b.visible) continue;
     const bx = player.position.x + u.bx + Math.sin(t * 0.6 + u.s) * 2.2;
     const bz = player.position.z + u.bz + Math.cos(t * 0.45 + u.s * 1.7) * 2.2;
     b.position.set(bx, u.y + Math.sin(t * 1.8 + u.s) * 0.35, bz);
@@ -6430,9 +6458,12 @@ function tick() {
     wx.geo.attributes.position.needsUpdate = true;
   }
 
-  // fireflies come out after dark
+  // fireflies come out after dark — none while the sun is up, and they thin out
+  // as the light fades in rather than popping on all 35 at once
   const night = 1 - dayLight;
-  flies.mat.opacity = night > 0.45 ? (night - 0.45) * 1.6 : 0;
+  const fDark = clamp((0.35 - dayLight) / 0.25, 0, 1);
+  flies.mat.opacity = fDark * 0.85;
+  flies.geo.setDrawRange(0, Math.round(flies.n * fDark));
   if (flies.mat.opacity > 0) {
     if (!save.fireflies) { save.fireflies = true; persist(); }
     for (let i = 0; i < flies.n; i++) {
@@ -6835,6 +6866,23 @@ if (DBG) window.__w = {
   caveOff: (v = false) => { if (caveRoom) caveRoom.g.visible = !v; return true; },
   caveTp: (x, z) => { player.position.set(x, caveGround(x, z), z); return __w.where(); },
   caveRoomInfo: () => (caveRoom ? { rot: caveRoom.rot, vault: caveRoom.vault, ledge: caveRoom.ledge, stair: caveRoom.stair, kind: caveRoom.kind, doors: caveRoom.doors.map((d) => [d.id, d.x, d.z, d.axis, d.open]), caches: caveRoom.caches.map((c) => [c.x, c.z, c.got, JSON.stringify(Object.fromEntries(Object.entries(c.kit).filter(([q]) => q !== 'col')))]) } : null),
+  // which lights are burning in which room: the vault's moonbeam may not reach the
+  // hall, and no other room may glow while she is still meant to be finding her way
+  caveLights: () => {
+    if (!caveRoom) return null;
+    const v = new THREE.Vector3(), out = [];
+    caveScene.traverse((o) => {
+      if (!o.isLight || o.intensity <= 0.01) return;
+      for (let q = o; q; q = q.parent) if (!q.visible) return;   // three skips a light inside a hidden group
+      o.getWorldPosition(v);
+      out.push({ t: o.type, i: +o.intensity.toFixed(2), col: o.color.getHexString(), r: o.distance === undefined ? 0 : +o.distance.toFixed(0),
+        x: +v.x.toFixed(1), y: +v.y.toFixed(1), z: +v.z.toFixed(1),
+        room: CAVE_ROOMS.findIndex((r) => inRoom(r, v.x, v.z, 3)) });
+    });
+    return { at: [+player.position.x.toFixed(1), +player.position.z.toFixed(1)], lights: out,
+      rooms: CAVE_ROOMS.map((r, i) => ({ i, vault: r === caveRoom.vault,
+        sum: +out.filter((l) => l.room === i).reduce((a, l) => a + l.i, 0).toFixed(2) })) };
+  },
   caveMask: (hide = []) => { const k = new Set(hide); caveRoom.g.children.forEach((o, i) => { o.visible = !k.has(i); }); return caveRoom.g.children.length; },
   caveInfo: () => caveRoom.g.children.map((o, i) => [i, o.type, o.position.toArray().map((n) => +n.toFixed(1)), o.scale.toArray().map((n) => +n.toFixed(1))]),
   caveKids: () => caveScene.children.map((o) => [o.type, o.position.toArray().map((n) => +n.toFixed(1)), o.visible]),

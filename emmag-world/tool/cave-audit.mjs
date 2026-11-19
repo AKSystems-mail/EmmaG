@@ -65,6 +65,19 @@ for (const key of KEYS) {
 
   // the vault is the room she has to find: its light may not be on from the hall
   if (chest.shine) bad(tag, 'the secret room is lit from the hall');
+  // ...and neither may its own lights. The gate padding reached 3 m past the ellipse,
+  // so the waterfall room lit up while she was still standing in the hall doorway
+  const rooms = J(await ev(`JSON.stringify(window.__w.caveProps().rooms)`));
+  const hall0 = rooms[0];
+  const ux0 = hall0[0] - v.x, uz0 = hall0[1] - v.z, ul = Math.hypot(ux0, uz0) || 1;
+  const nu = [ux0 / ul, uz0 / ul];
+  const tEdge = 1 / Math.hypot(nu[0] / v.rx, nu[1] / v.rz);      // ellipse radius that way
+  const outPt = [v.x + nu[0] * (tEdge + 1.2), v.z + nu[1] * (tEdge + 1.2)];
+  await ev(`window.__w.gateReset(); window.__w.caveTp(${outPt[0]}, ${outPt[1]})`);
+  await sleep(320);
+  const lv = J(await ev(`JSON.stringify(window.__w.caveLights())`));
+  const vi = lv.rooms.findIndex((r) => r.vault);
+  if (lv.rooms[vi].sum > 0) bad(tag, `vault lights are on ${(1.2).toFixed(1)} m outside it (sum ${lv.rooms[vi].sum})`);
 
   // crystals: nothing may push her off one, and one has to be walkable to
   const disp = J(await ev(`JSON.stringify(window.__w.cave().crystals.map((c) => { const q = window.__w.pushAt(c.x, c.z); return +Math.hypot(q[0] - c.x, q[1] - c.z).toFixed(2); }))`));
@@ -136,6 +149,16 @@ for (const key of KEYS) {
   await ev(`window.__w.caveTp(${v.x}, ${v.z})`);
   await sleep(400);
   if (!J(await ev(`JSON.stringify(window.__w.chest())`)).shine) bad(tag, 'the secret room stays dark inside');
+  // and the light that lights it has to be the vault's: a beam pinned to another room
+  // showed the waterfall room lit while the glow hung somewhere else
+  {
+    const lv2 = J(await ev(`JSON.stringify(window.__w.caveLights())`));
+    const moon = lv2.lights.find((l) => l.col === '9fc0ff');
+    const vi2 = lv2.rooms.findIndex((r) => r.vault);
+    if (!moon) bad(tag, 'the waterfall room has no moonbeam inside');
+    else if (moon.room !== vi2) bad(tag, `the moonbeam hangs in room ${moon.room}, not the vault (${vi2})`);
+    else if (!lv2.lights.some((l) => l.col === 'ffc978' && l.room === vi2)) bad(tag, 'the gold glow is not in the vault');
+  }
   await ev(`window.__w.gateReset()`);
   await ev(`window.__w.caveTp(${v.x}, ${v.z + 30})`);
   console.log(`${tag.padEnd(18)} crystals ${crys.length}  gift ${cr} m  caches ${info.caches.length}  doors ${info.doors.length}`);
