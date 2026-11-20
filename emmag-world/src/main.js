@@ -39,7 +39,9 @@ const isGone = (n, now = performance.now()) => {
 // a half-written or evicted save used to throw here and kill the whole module (blank world)
 const store = (() => { try { return JSON.parse(localStorage.getItem(SAVE) || '{}') || {}; } catch { return {}; } })();
 const save = Object.assign(
-  { seed: (Math.random() * 1e9) | 0, x: R / 2, z: R / 2, gates: [], restored: [], res: { wood: 0, stone: 0, bloom: 0, spark: 0 } },
+  // ?seed= pins the world for audits and bug reports; without it, a new world each time
+  { seed: +(new URLSearchParams(location.search).get('seed')) || (Math.random() * 1e9) | 0,
+    x: R / 2, z: R / 2, gates: [], restored: [], res: { wood: 0, stone: 0, bloom: 0, spark: 0 } },
   store,
 );
 if (!Number.isFinite(save.x) || !Number.isFinite(save.z) || (save.x === 0 && save.z === 0)) save.x = save.z = R / 2;
@@ -126,7 +128,8 @@ scene.add(moon);
 // One plane that follows the player; the colour comes from world-space noise,
 // so the meadow never repeats and never seams.
 const MONTH = new Date().getMonth();
-const SEASON = MONTH < 2 || MONTH === 11 ? 'winter' : MONTH < 5 ? 'spring' : MONTH < 8 ? 'summer' : 'autumn';
+const SEASON = new URLSearchParams(location.search).get('season')   // ?season=winter to preview
+  || (MONTH < 2 || MONTH === 11 ? 'winter' : MONTH < 5 ? 'spring' : MONTH < 8 ? 'summer' : 'autumn');
 const snowU = { value: SEASON === 'winter' ? 0.5 : 0 };
 const seasonTint = { value: new THREE.Color(SEASON === 'autumn' ? 0xa8813a : SEASON === 'spring' ? 0x7fc46a : 0xffffff) };
 const seasonAmt = { value: SEASON === 'autumn' ? 0.2 : SEASON === 'spring' ? 0.1 : 0 };
@@ -413,6 +416,18 @@ const geo = {
 
 
   mush: new THREE.ConeGeometry(0.15, 0.2, 7).translate(0, 0.26, 0),
+
+  // a drift, not a ball: squashed icosphere with its rim knocked about by position
+  snow: (() => {
+    const g = new THREE.IcosahedronGeometry(0.62, 1), p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      const k = 1 + 0.18 * Math.sin(x * 9.7 + z * 6.1);
+      p.setXYZ(i, x * k * 1.3, Math.max(0, y) * 0.62 + 0.02, z * k * 1.05);
+    }
+    g.computeVertexNormals();
+    return g;
+  })(),
 };
 
 function pool(g, m, cap) {
@@ -434,6 +449,7 @@ const pools = {
   bush: pool(geo.bush, mat({ color: 0x3f8a3c }), 400),
   // tuft: built from grass.glb once it lands -- a cone here read as a green spike
   mush: pool(geo.mush, mat({ color: 0xe06a7a }), 90),
+  snow: pool(geo.snow, mat({ color: 0xf4fbff }), 420),
 };
 
 // a real grass clump for the open-field patches; instanceColor tints it
@@ -628,8 +644,32 @@ function paveTrails(px, pz) {
 
 // three trees, three boulders, one flat slab: all normalised so p.s still means
 // what it did before (a 0.8-1.3 tree is 3.7-6 m tall)
-['tree_a', 'tree_b', 'birch'].forEach((n, i) => loadPack(`/models/${n}.glb`, (gl) => {
-  pools['tree' + i] = pool(bake(fitAll(partsOf(gl), 4.6)), packMat(), 240);
+// green foliage -> gold, trunk left brown: only vertices that are clearly leaf-green move
+function leafGold(g, warm = 0) {
+  const c = g.attributes.color; if (!c) return g;
+  const a = c.array;
+  for (let i = 0; i < a.length; i += 3) {
+    const r = a[i], l = a[i + 1];
+    if (l <= r * 1.15) continue;                       // trunk, branch, anything brown
+    a[i] = l * (2.9 - warm * 0.7);                     // red up
+    a[i + 1] = l * (1.55 - warm * 0.75);               // green down, but not out: gold needs it
+    a[i + 2] = l * (0.30 - warm * 0.16);               // blue gone
+  }
+  c.needsUpdate = true;
+  return g;
+}
+const TREES = SEASON === 'winter'
+  ? ['pine_snow', 'dead_tree_snow']                // Quaternius pine, dook dead tree
+  : ['tree_a', 'tree_b', 'birch'];
+// four silhouettes, three models -- winter only has two, so it alternates
+const TREE_SLOTS = SEASON === 'winter'
+  ? ['tree0', 'tree1', 'tree0', 'tree1']
+  : ['tree0', 'tree2', 'tree1', 'tree0'];
+TREES.forEach((n, i) => loadPack(`/models/${n}.glb`, (gl) => {
+  const g = bake(fitAll(partsOf(gl), 4.6));
+  // autumn: the two broadleafs turn, the birch stays green all year
+  if (SEASON === 'autumn' && i < 2) leafGold(g, 0.35);
+  pools['tree' + i] = pool(g, packMat(), 240);
 }));
 [['rock_flat', 'rockFlat', 0x8d939c], ['rock_b', 'rockB', 0], ['rock_c', 'rockC', 0]].forEach(([n, key, tint]) => loadPack(`/models/${n}.glb`, (gl) => {
   const ps = fitAll(partsOf(gl), 0), g = ps[0].geo;
@@ -643,8 +683,12 @@ function paveTrails(px, pz) {
   pools[key] = pool(g, m, 160);
   if (key === 'rockC') for (const c of caves.values()) if (c.g) addCaveRocks(c.g);
 }));
-// bushes: Quaternius shrubs, two kinds, picked per prop by tone
-loadPack('/models/bush_a.glb', (gl) => {
+// bushes: Quaternius shrubs, two kinds, picked per prop by tone.
+// winter swaps both for the snowy one, fitted the same 1.1 m shrub height
+if (SEASON === 'winter') loadPack('/models/bush_snow.glb', (gl) => {
+  pools.bush0 = pool(fitAll([{ geo: bake(partsOf(gl)) }], 1.1)[0].geo, packMat(), 200);
+});
+if (SEASON !== 'winter') loadPack('/models/bush_a.glb', (gl) => {
   const ps = fitAll(partsOf(gl), 1.1);          // a shrub, not a tree
   // the pack ships one flat dark green and 0.4 metal -- too dull for this light,
   // so the colour comes from the instance tint instead
@@ -653,7 +697,7 @@ loadPack('/models/bush_a.glb', (gl) => {
 });
 // two primitives (leaves + berries), so colours bake per vertex and the
 // berries survive the instance tint as red
-loadPack('/models/bush_b.glb', (gl) => {
+if (SEASON !== 'winter') loadPack('/models/bush_b.glb', (gl) => {
   const ps = fitAll(partsOf(gl), 1.1);
   for (const p of ps) p.mat = new THREE.MeshStandardMaterial({ color: /berry/i.test(p.mat.name || '') ? 0xa8323a : 0x55843f });
   pools.bush1 = pool(bake(ps), packMat(), 200);
@@ -733,14 +777,27 @@ loadPack('/models/dock.glb', (gl) => {
 const shellMat = new THREE.MeshStandardMaterial({ flatShading: true, roughness: 1, color: 0x9aa29b });
 const SHELL = { s: 2.15, y: -1.25, z: 0.5, tilt: -0.05 };
 let shellGeo = null;
+// winter: the cave mouth wears an igloo instead of the rock shell -- same spot,
+// same trigger, only the skin changes
+let iglooGeo = null, iglooMat = null;
 function addShell(g) {
-  if (!shellGeo || g.userData.shell) return;
+  if (g.userData.shell) return;
+  const geo = SEASON === 'winter' ? iglooGeo : shellGeo;
+  if (!geo) return;
   if (g.userData.old) { g.remove(g.userData.old); g.userData.old = null; }
-  const s = new THREE.Mesh(shellGeo, shellMat);
-  s.scale.setScalar(SHELL.s);
-  s.position.set(0, SHELL.y, SHELL.z);
-  s.rotation.y = Math.PI;          // the pack's mouth faces -z
-  s.rotation.x = SHELL.tilt;       // dip the rear into the hill, keep the mouth level
+  const s = new THREE.Mesh(geo, SEASON === 'winter' ? iglooMat : shellMat);
+  if (SEASON === 'winter') {
+    // the igloo's own entrance tunnel runs across its local x, so a quarter turn
+    // points it at the approach
+    s.scale.setScalar(1.15);
+    s.position.set(0, -0.4, 1.2);
+    s.rotation.y = Math.PI / 2;
+  } else {
+    s.scale.setScalar(SHELL.s);
+    s.position.set(0, SHELL.y, SHELL.z);
+    s.rotation.y = Math.PI;          // the pack's mouth faces -z
+    s.rotation.x = SHELL.tilt;       // dip the rear into the hill, keep the mouth level
+  }
   s.castShadow = true; s.receiveShadow = true;
   g.add(s);
   g.userData.shell = true;
@@ -766,6 +823,29 @@ loadPack('/models/cave_mouth.glb', (gl) => {
   shellGeo = fitAll(partsOf(gl), 2.08)[0].geo;
   for (const c of caves.values()) if (c.g) addShell(c.g);
 });
+
+// winter props: only in the cold months. The igloo does double duty -- one stands
+// in the meadow, and every cave mouth wears one instead of the rock shell.
+if (SEASON === 'winter') {
+  loadPack('/models/igloo.glb', (gl) => {
+    const ps = partsOf(gl);
+    iglooMat = ps[0].mat;
+    iglooGeo = fitAll(ps.map((p) => ({ geo: p.geo, mat: p.mat })), 3.0)[0].geo;
+    const m = new THREE.Mesh(iglooGeo, iglooMat);   // its own texture: bake() would flatten it
+    m.position.set(18, 0, -9);
+    m.rotation.y = -0.6;
+    m.castShadow = m.receiveShadow = true;
+    scene.add(m);
+    // she can't walk through the dome, and (ax, az) is the way in: the tunnel
+    // runs along the mesh's local +z, so the door turns with the model
+    PROP_SOLID.push({ x: 18, z: -9, r: 2.4, ax: Math.sin(m.rotation.y), az: Math.cos(m.rotation.y) });
+    for (const c of caves.values()) if (c.g) addShell(c.g);
+  });
+  // snowmen scatter like rocks -- one pool, one draw, and they only exist in winter
+  loadPack('/models/snowman.glb', (gl) => {
+    pools.snowman = pool(fitAll([{ geo: bake(partsOf(gl)) }], 1.35)[0].geo, packMat(), 60);
+  });
+}
 
 // ---------------------------------------------------------------- chunks
 const chunks = new Map();
@@ -854,6 +934,11 @@ function genChunk(cx, cz) {
       s: 0.75 + rnd() * 0.5, r: rnd() * 6.283, tone: rnd() });
   }
   if (rnd() < 0.5) add('mush', 1 + Math.floor(rnd() * 3), 0.8, 1.3);
+  // winter scatter comes last so the rest of the world keeps the same draws
+  if (SEASON === 'winter') {
+    add('snow', 4 + Math.floor(rnd() * 4), 0.7, 1.6);
+    if (rnd() < 0.14) add('snowman', 1, 0.95, 1.1);   // about one every seven chunks
+  }
   // only the big stuff keeps out: the focus is him, not a mown ring
   const gs = giantAt();
   return { cx, cz, nodes: nodes.filter((n) =>
@@ -884,7 +969,7 @@ function rebuild() {
         // four silhouettes kept, three models: two broadleafs and a birch
         const v = Math.min(3, Math.floor(p.tone * 4));
         col.setScalar(0.9 + p.tone * 0.16);
-        put(['tree0', 'tree2', 'tree1', 'tree0'][v], p.s, p.s, p.s);
+        put(TREE_SLOTS[v], p.s, p.s, p.s);
       } else if (p.type === 'rock') {
         // three tiers: flat slab, then two boulders, each bigger than the last
         const tier = p.tone < 0.45 ? 0 : p.tone < 0.8 ? 1 : 2;
@@ -899,10 +984,17 @@ function rebuild() {
         col.setHSL(0.68, 0.45, 0.8);    // lilac frost: a hint of purple, still see-through
         put('crystal', p.s, p.s, p.s);
       } else if (p.type === 'bush') {
-        const berry = p.tone >= 0.5 && pools.bush1;
-        col.setHSL(0.29 + p.tone * 0.04, 0.44, 0.24 + p.tone * 0.12);
-        if (berry) col.setScalar(0.95 + p.tone * 0.1);   // colours are baked, don't tint the berries green
+        const berry = SEASON !== 'winter' && p.tone >= 0.5 && pools.bush1;
+        // the snowy shrub has its colours baked too, so it only gets a brightness nudge
+        if (berry || SEASON === 'winter') col.setScalar(0.95 + p.tone * 0.1);
+        else col.setHSL(0.29 + p.tone * 0.04, 0.44, 0.24 + p.tone * 0.12);
         put(berry ? 'bush1' : pools.bush0 ? 'bush0' : 'bush', p.s, p.s, p.s);
+      } else if (p.type === 'snow') {
+        col.setScalar(0.95 + p.tone * 0.05);
+        put('snow', p.s, p.s, p.s, -0.03 * p.s);
+      } else if (p.type === 'snowman') {
+        col.setScalar(1);
+        put('snowman', p.s, p.s, p.s);
       } else if (p.type === 'grass') {
         col.setHSL(0.26 + p.tone * 0.04, 0.4, 0.46 + p.tone * 0.1);
         put('grass', p.s * 1.5, p.s * 1.5 * (0.9 + p.tone * 0.3), p.s * 1.5);
@@ -913,7 +1005,7 @@ function rebuild() {
     }
   }
   // only the chunk-prop pools: reeds, blooms and path tiles are filled elsewhere
-  for (const k of ['tree0', 'tree1', 'tree2', 'rockFlat', 'rockB', 'rockC', 'flower', 'crystal', 'bush', 'bush0', 'bush1', 'tuft', 'mush', 'grass']) {
+  for (const k of ['tree0', 'tree1', 'tree2', 'rockFlat', 'rockB', 'rockC', 'flower', 'crystal', 'bush', 'bush0', 'bush1', 'tuft', 'mush', 'grass', 'snow', 'snowman']) {
     if (!pools[k]) continue;
     pools[k].count = n[k] || 0;
     pools[k].instanceMatrix.needsUpdate = true;
@@ -2027,8 +2119,10 @@ let sparkFade = 0;
 
 const RSTEPS = [0.5, 1, 1.7];                       // rock tiers: slab, boulder, big boulder
 const rockStep = (tone) => RSTEPS[tone < 0.45 ? 0 : tone < 0.8 ? 1 : 2];
-const SOLID = { tree: 0.40, rock: 0.78, bush: 0.62, crystal: 0.38 };
+const SOLID = { tree: 0.40, rock: 0.78, bush: 0.62, crystal: 0.38, snowman: 0.45 };
 const PR = 0.26;
+// props that are not chunk nodes: the meadow igloo. Filled as they are placed.
+const PROP_SOLID = [];
 
 function pushOut(x, z) {
   if (inCave && caveRoom) {
@@ -2112,7 +2206,10 @@ function pushOut(x, z) {
   for (const c of chunks.values()) {
     if (Math.abs(c.cx * CH - px) > CH * 1.4 || Math.abs(c.cz * CH - pz) > CH * 1.4) continue;
     for (const n of c.nodes) {
-      const r = n.type === 'rock' ? SOLID.rock * rockStep(n.tone) : SOLID[n.type];
+      const r = n.type === 'rock' ? SOLID.rock * rockStep(n.tone)
+        // a snowy pine is wider than a bare trunk: stop at the branches, not the core
+        : n.type === 'tree' && SEASON === 'winter' ? 0.55
+        : SOLID[n.type];
       if (!r) continue;
       const rr = r * n.s + PR;
       if (!near(n.x, n.z)) continue;
@@ -2123,6 +2220,10 @@ function pushOut(x, z) {
         pz = n.z + (dz / d) * rr;
       }
     }
+  }
+  for (const p of PROP_SOLID) {
+    const dx = px - p.x, dz = pz - p.z, rr = p.r + PR, d2 = dx * dx + dz * dz;
+    if (d2 < rr * rr && d2 > 1e-6) { const d = Math.sqrt(d2); px = p.x + (dx / d) * rr; pz = p.z + (dz / d) * rr; }
   }
   const disc = (ox, oz, rr) => {
     const dx = px - ox, dz = pz - oz, d2 = dx * dx + dz * dz;
@@ -2799,7 +2900,13 @@ const mkPoints = (n, size, hex, opacity) => {
   return { pos, geo: g, mat: m, pts, n };
 };
 const wx = mkPoints(240, 0.18, 0xffffff, 0);
-const flies = mkPoints(35, 0.26, 0xd9ff9e, 0);
+const flies = mkPoints(25, 0.26, 0xd9ff9e, 0);
+// per-fly brightness needs a vertex colour: with additive blending a black vertex adds
+// nothing, so each one can fade up and down on its own instead of the whole field
+// sharing one opacity
+flies.mat.vertexColors = true;
+flies.mat.blending = THREE.AdditiveBlending;
+flies.geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(flies.n * 3), 3));
 let weather = 'clear';
 let remoteRain = false;
 
@@ -2823,12 +2930,14 @@ function pickWeather() {
     : SEASON === 'spring' ? (r < 0.5 ? 'petals' : 'clear')
     : SEASON === 'autumn' ? (r < 0.45 ? 'leaves' : 'clear')
     : r < 0.2 ? 'rain' : r < 0.48 ? 'petals' : 'clear';
-  wx.mat.color.set({ rain: 0xbcd7e8, snow: 0xffffff, petals: 0xf6b6d6, leaves: 0xe8a24d, clear: 0xffffff }[weather]);
+  const forced = new URLSearchParams(location.search).get('wx');   // ?wx=leaves to look at it
+  if (forced) weather = forced;
+  wx.mat.color.set({ rain: 0xbcd7e8, snow: 0xffffff, petals: 0xf6b6d6, clear: 0xffffff }[weather]);
   wx.mat.size = weather === 'rain' ? 0.1 : weather === 'snow' ? 0.16 : 0.18;
-  wx.mat.opacity = weather === 'clear' ? 0 : weather === 'rain' ? 0.5 : 0.8;
+  wx.mat.opacity = weather === 'clear' || weather === 'leaves' ? 0 : weather === 'rain' ? 0.5 : 0.8;
   for (let i = 0; i < wx.n; i++) {
     wx.pos[i * 3] = player.position.x + (Math.random() - 0.5) * 46;
-    wx.pos[i * 3 + 1] = Math.random() * 16;
+    wx.pos[i * 3 + 1] = weather === 'rain' || weather === 'snow' ? Math.random() * 16 : 1 + Math.random() * 7;
     wx.pos[i * 3 + 2] = player.position.z + (Math.random() - 0.5) * 46;
   }
 }
@@ -2838,6 +2947,70 @@ function seedFlies() {
     flies.pos[i * 3 + 1] = 0.6 + Math.random() * 2.4;
     flies.pos[i * 3 + 2] = player.position.z + (Math.random() - 0.5) * 26;
   }
+  flies.geo.attributes.position.needsUpdate = true;
+  // the spot each fly lives in; the sway in the tick loop is measured from here
+  flies.home = flies.home || new Float32Array(flies.pos.length);
+  flies.home.set(flies.pos);
+}
+
+// autumn leaves are a real model now: the one leaf pulled out of the client's GLB,
+// instanced 48 times. leaves fall — that is what leaves do in autumn — and the fireflies
+// are the ones that just hover where they are (see fliesTick)
+let leaves = null, leafHome = null, leafY = null, leafSpd = null, leafSeeded = false;
+const LEAF_N = 48;
+const leafM4 = new THREE.Matrix4(), leafQ = new THREE.Quaternion(), leafE = new THREE.Euler();
+const leafP = new THREE.Vector3(), leafS = new THREE.Vector3(0.22, 0.22, 0.22);   // 22 cm, reads at distance
+new GLTFLoader().load('/models/leaf.glb', (gl) => {
+  const part = partsOf(gl)[0];
+  if (!part) return;
+  part.geo.center();                    // spin about its own middle, not a corner
+  part.mat.transparent = true;
+  part.mat.side = THREE.DoubleSide;
+  part.mat.depthWrite = false;          // soft alpha edges must not cut out the ground
+  leaves = new THREE.InstancedMesh(part.geo, part.mat, LEAF_N);
+  leaves.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  leaves.frustumCulled = false;
+  leaves.visible = false;
+  leafHome = new Float32Array(LEAF_N * 3);
+  leafY = new Float32Array(LEAF_N);
+  leafSpd = new Float32Array(LEAF_N);
+  scene.add(leaves);
+}, undefined, () => {});
+function seedLeaves() {
+  for (let i = 0; i < LEAF_N; i++) {
+    leafHome[i * 3] = player.position.x + (Math.random() - 0.5) * 24;
+    leafHome[i * 3 + 2] = player.position.z + (Math.random() - 0.5) * 24;
+    leafY[i] = 1.5 + Math.random() * 6;                     // mid-fall, not all at the top
+    leafSpd[i] = 0.45 + Math.random() * 0.55;               // 0.45-1 m/s: a leaf, not a stone
+  }
+  leafSeeded = true;
+}
+function leafTick(t, dt) {
+  if (!leaves) return;
+  leaves.visible = weather === 'leaves';
+  if (!leaves.visible) return;
+  // ponytail: leaf 1 stands in for the whole field when reseeding, add a real nearest
+  // check if a leaf is ever seen popping in
+  if (!leafSeeded || Math.hypot(leafHome[0] - player.position.x, leafHome[2] - player.position.z) > 34) {
+    seedLeaves();
+  }
+  for (let i = 0; i < LEAF_N; i++) {
+    const k = i * 3;
+    leafY[i] -= leafSpd[i] * dt;                            // it falls, swaying as it goes
+    if (leafY[i] < 0.15) {
+      leafY[i] = 6.5 + Math.random() * 3;                   // out of sight above, not in front of her
+      leafHome[k] = player.position.x + (Math.random() - 0.5) * 24;
+      leafHome[k + 2] = player.position.z + (Math.random() - 0.5) * 24;
+    }
+    leafP.set(
+      leafHome[k] + Math.sin(t * 0.6 + i * 1.7) * 0.7,
+      leafY[i],
+      leafHome[k + 2] + Math.cos(t * 0.45 + i * 2.6) * 0.7);
+    leafE.set(t * 0.5 + i, t * 0.31 + i * 1.3, t * 0.4 + i * 0.7);
+    leafQ.setFromEuler(leafE);
+    leaves.setMatrixAt(i, leafM4.compose(leafP, leafQ, leafS));
+  }
+  leaves.instanceMatrix.needsUpdate = true;
 }
 
 function objectives() {
@@ -4486,7 +4659,7 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
         if (((x - HALL.x) / (HALL.rx - 3)) ** 2 + ((z - HALL.z) / (HALL.rz - 3)) ** 2 > 1) continue;
         if (z > mouth.z - 10) continue;
         if (CAVE_DOORS.some((d) => Math.hypot(x - d.x, z - d.z) < 8)) continue;
-        if (crowded(x, z, 1.2) || crystals.some((c) => Math.hypot(c.x - x, c.z - z) < 8)) continue;
+        if (crowded(x, z, 1.7) || crystals.some((c) => Math.hypot(c.x - x, c.z - z) < 8)) continue;
         spot.push([x, z]);
       }
     // farthest from the ones already down, so three never bunch up
@@ -4620,13 +4793,17 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
   // is a corridor and the vault already has the chest, so both are left alone
   const caches = [];
   const dry = [];
+  const anyRoom = [];
   for (let i = 1; i < CAVE_ROOMS.length; i++) {
     const r = CAVE_ROOMS[i];
     if (r === vault) continue;
+    anyRoom.push(i);
     if (pond && Math.hypot(r.x - pond.x, r.z - pond.z) < pond.r + 8) continue;   // the room with water keeps its pool
     dry.push(i);
   }
-  for (const i of dry.length ? [dry[keyNum(key) % dry.length]] : []) {
+  // a cave always has its one cache: if every side room is wet, the dry rule loses
+  const pool = dry.length ? dry : anyRoom;
+  for (const i of pool.length ? [pool[keyNum(key) % pool.length]] : []) {
     const r = CAVE_ROOMS[i];
     const spots = [[r.x, r.z], [r.x, r.z + 3], [r.x + 3, r.z], [r.x, r.z - 3]];
     const sp = spots.find(([x, z]) => !solids.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + 1.6));
@@ -4699,19 +4876,17 @@ function enterCave(c) {
     lantern.intensity = 9;
     sfx.setEcho(true);
     for (const d of caveRoom.doors) if (d.open && d.kind === 'crystal') caveBeacon(d);
-    // the three lights were spent on the first door they opened: a cave she has
-    // already solved keeps its doors open, so it does not grow the crystals back
-    const lit = caveRoom.doors.some((d) => d.open);
+    // the three lights were spent on the crystal door: a cave she has already solved
+    // keeps its doors open, so it does not grow the crystals back
+    const lit = caveRoom.doors.some((d) => d.open && d.kind === 'crystal');
     if (lit) caveFound = 3;
     for (const k of caveRoom.crystals) {
       k.got = lit; k.g.visible = !lit; k.light.intensity = lit ? 0 : (caveRoom.glow ? 1.5 : 0);
     }
     caveRoom.chest.visible = !save.treasure.includes(caveKey);
-    // entry always starts dark: the vault lights belong to whoever is standing in it,
-    // and her old coordinates can land inside the new vault before she is moved
-    caveRoom.shine.visible = false;
-    caveRoom.moon.l.visible = false;
-    caveRoom.moon.beam.visible = false;
+    // the waterfall room's light is decided by caveFound every tick, not by where she
+    // is standing: lit the moment the third crystal is picked up, and still lit on the
+    // next visit to a cave she has already solved
     updateObjective();
     $('#fade').classList.remove('on');
     toast('A cave under the hill');
@@ -4844,15 +5019,14 @@ function caveTick(dt, t) {
     b.pool.scale.setScalar(1 + pulse * 0.18);
     b.l.intensity = (b.t < 30 ? 4 : 1.4) * (0.6 + pulse * 0.4);
   }
-  // the vault is the one room she has to find: its moonbeam and the gold glow over
-  // the box must not light it up from the hall, or it reads as a room already lit
-  // pad 0: the pad used to be 3 m, so the vault's moonbeam and the gold glow over the
-  // box both lit up while she was still standing in the hall doorway — it read as a
-  // room that was already lit instead of one she had just found
-  const inVault = inRoom(caveRoom.vault, px, pz, 0);
-  caveRoom.moon.l.visible = inVault;
-  caveRoom.moon.beam.visible = inVault;
-  caveRoom.shine.visible = inVault && caveRoom.chest.visible;
+  // the waterfall room is the one lit room in a cave: its moonbeam comes on when the
+  // third crystal is picked up and never goes off again, so a cave she has solved is
+  // still lit when she walks back in. before that it is dark — and shut, because the
+  // wall only opens once the three lights are lit
+  const vaultLit = caveFound >= 3;
+  caveRoom.moon.l.visible = vaultLit;
+  caveRoom.moon.beam.visible = vaultLit;
+  caveRoom.shine.visible = vaultLit && caveRoom.chest.visible;
   if (caveRoom.shine.visible) {
     const glowPulse = 0.5 + 0.5 * Math.sin(t * 2.2);
     const [halo, shaft, sl] = caveRoom.shine.children;
@@ -5954,6 +6128,8 @@ const MAP_TURN = 3;   // marker catch-up per second; drop toward 3 for a heavier
 const gateSeen = new Set();
 const SPD = 6.4, STRIDE = 4.7;
 let vel = 0, turnRate = 0, leanZ = 0, leanV = 0, pitchX = 0, pitchV = 0, swingE = 0, lastStep = 0, camNear = 9.6;
+// winter recoil: walk into something solid and she eases back a hand's width
+let bumpX = 0, bumpZ = 0, bumpCool = 0;
 const dir = new THREE.Vector3(0, 0, 1), lookAt = new THREE.Vector3(), UPV = new THREE.Vector3(0, 1, 0);
 let fPh = 0, earA = 0, earV = 0, idleT = 0, catSit = 0, catLie = 0, petT = 0, tailA = 0, tailV = 0;
 const camRay = new THREE.Raycaster();
@@ -5991,15 +6167,29 @@ function tick() {
   if (moving) dir.copy(want).normalize();
   // speed ramps in fast and out faster, so the body has weight without lag
   vel += ((moving ? SPD : 0) - vel) * Math.min(1, dt * (moving ? 11 : 14));
+  // while she's stepping back off something solid the stick does nothing: the
+  // bump has to read, not get eaten by her walking straight back into it
+  if (bumpX || bumpZ) vel = 0;
   if (vel > 0.05) {
     const nx = player.position.x + dir.x * vel * dt;
     const nz = player.position.z + dir.z * vel * dt;
     const nk = regionKey(nx, nz);
     if (nk !== regionNow && !save.gates.includes(nk)) save.gates.push(nk);
     const [cx, cz] = pushOut(nx, nz);
+    // shoved back by most of the step? that was a wall, not a slide along it
+    const blocked = Math.hypot(cx - nx, cz - nz) > vel * dt * 0.6;
     const moved = Math.hypot(cx - player.position.x, cz - player.position.z);
     player.position.x = cx;
     player.position.z = cz;
+    // walking up the igloo's own tunnel isn't hitting a wall: no bounce there
+    const atDoor = PROP_SOLID.some((p) => p.ax !== undefined
+      && (cx - p.x) * p.ax + (cz - p.z) * p.az > 0
+      && Math.abs(dir.x * p.ax + dir.z * p.az) > 0.55);
+    if (SEASON === 'winter' && blocked && !atDoor && bumpCool <= 0 && !bumpX && !bumpZ) {
+      bumpX = -dir.x * 2.4; bumpZ = -dir.z * 2.4;   // m/s, gone in ~0.3 s: about a stride back
+      bumpCool = 0.35;
+      vel = 0;
+    }
     for (const pd of ponds.values()) if (onBridge(pd, cx, cz)) save.crossed = (save.crossed || 0) + dt;
     regionNow = regionKey(cx, cz);
     const target = Math.atan2(dir.x, dir.z);
@@ -6025,6 +6215,16 @@ function tick() {
     vel = 0;
     turnRate *= 0.85;
     if (!riding) player.position.y += (bridgeY - player.position.y) * 0.25;
+  }
+
+  bumpCool -= dt;
+  if (bumpX || bumpZ) {
+    const [bx, bz] = pushOut(player.position.x + bumpX * dt, player.position.z + bumpZ * dt);
+    player.position.x = bx;
+    player.position.z = bz;
+    const k = Math.max(0, 1 - dt * 7);
+    bumpX *= k; bumpZ *= k;
+    if (Math.hypot(bumpX, bumpZ) < 0.04) bumpX = bumpZ = 0;
   }
 
   // ground height is a property of where you stand, not of whether you move
@@ -6440,44 +6640,61 @@ function tick() {
     if (c.g.position.distanceTo(player.position) > 220) c.home.set(player.position.x, player.position.z);
   }
 
-  // weather
-  if (weather !== 'clear') {
-    const rain = weather === 'rain';
-    const fall = rain ? 13 : weather === 'snow' ? 2.2 : 1.3;
+  // weather (petals, rain, snow — leaves are models, see leafTick)
+  if (weather !== 'clear' && weather !== 'leaves') {
+    const rain = weather === 'rain', wet = rain || weather === 'snow';
+    const fall = rain ? 13 : 2.2;
     for (let i = 0; i < wx.n; i++) {
       const k = i * 3;
-      wx.pos[k + 1] -= fall * dt;
-      wx.pos[k] += (rain ? 0.4 : Math.sin(t * 0.9 + i) * 0.5) * dt;
-      wx.pos[k + 2] += (rain ? 0.2 : Math.cos(t * 0.7 + i) * 0.4) * dt;
+      if (wet) {
+        wx.pos[k + 1] -= fall * dt;
+        wx.pos[k] += (rain ? 0.4 : Math.sin(t * 0.9 + i) * 0.5) * dt;
+        wx.pos[k + 2] += (rain ? 0.2 : Math.cos(t * 0.7 + i) * 0.4) * dt;
+      } else {
+        // petals and leaves never drop out of the sky: they hang where they are and
+        // drift. a sine velocity integrates to a bounded wander, so nothing falls
+        // and nothing has to be recycled in from above
+        wx.pos[k] += Math.sin(t * 0.35 + i) * 0.7 * dt;
+        wx.pos[k + 1] += Math.sin(t * 0.5 + i * 1.3) * 0.18 * dt;
+        wx.pos[k + 2] += Math.cos(t * 0.31 + i * 2.1) * 0.7 * dt;
+      }
       if (wx.pos[k + 1] < 0 || Math.abs(wx.pos[k] - player.position.x) > 26 || Math.abs(wx.pos[k + 2] - player.position.z) > 26) {
         wx.pos[k] = player.position.x + (Math.random() - 0.5) * 44;
-        wx.pos[k + 1] = 14 + Math.random() * 4;
+        wx.pos[k + 1] = wet ? 14 + Math.random() * 4 : 1 + Math.random() * 7;
         wx.pos[k + 2] = player.position.z + (Math.random() - 0.5) * 44;
       }
     }
     wx.geo.attributes.position.needsUpdate = true;
   }
 
-  // fireflies come out after dark — none while the sun is up, and they thin out
-  // as the light fades in rather than popping on all 35 at once
-  const night = 1 - dayLight;
+  leafTick(t, dt);
+
+  // fireflies come out after dark — none while the sun is up. they hang where they are
+  // and glow on for a second, off for a second, then rest eight: a ten-second cycle of
+  // which two seconds are lit. they wander a little around the spot they live in, and
+  // nothing ever falls or flies in from anywhere
   const fDark = clamp((0.35 - dayLight) / 0.25, 0, 1);
   flies.mat.opacity = fDark * 0.85;
-  flies.geo.setDrawRange(0, Math.round(flies.n * fDark));
   if (flies.mat.opacity > 0) {
     if (!save.fireflies) { save.fireflies = true; persist(); }
+    const col = flies.geo.attributes.color, home = flies.home;
+    let near = 1e9;
     for (let i = 0; i < flies.n; i++) {
       const k = i * 3;
-      flies.pos[k] += Math.sin(t * 0.8 + i) * 0.012;
-      flies.pos[k + 1] += Math.cos(t * 0.6 + i * 2) * 0.01;
-      flies.pos[k + 2] += Math.cos(t * 0.7 + i * 3) * 0.012;
-      const dx = flies.pos[k] - player.position.x, dz = flies.pos[k + 2] - player.position.z;
-      if (Math.hypot(dx, dz) > 18) {
-        flies.pos[k] = player.position.x + (Math.random() - 0.5) * 24;
-        flies.pos[k + 2] = player.position.z + (Math.random() - 0.5) * 24;
-      }
+      // a slow three-way sway about its own home: bounded, so it just is there
+      flies.pos[k] = home[k] + Math.sin(t * 0.21 + i * 1.7) * 0.6;
+      flies.pos[k + 1] = home[k + 1] + Math.sin(t * 0.37 + i * 2.1) * 0.18;
+      flies.pos[k + 2] = home[k + 2] + Math.cos(t * 0.19 + i * 2.6) * 0.6;
+      near = Math.min(near, Math.hypot(home[k] - player.position.x, home[k + 2] - player.position.z));
+      const ph = (t * 0.1 + i * 0.37) % 1;                                   // 10 s a cycle, each out of step
+      const g = ph < 0.1 ? ph * 10 : ph < 0.2 ? (0.2 - ph) * 10 : 0;          // 1 s up, 1 s down
+      col.setXYZ(i, g, g, g);   // grey multiplier: the material colour keeps the hue
+    }
+    if (near > 26) {   // she has walked away from the whole field: reseed out of sight
+      seedFlies();
     }
     flies.geo.attributes.position.needsUpdate = true;
+    col.needsUpdate = true;
   }
 
   waterU.t.value = t;

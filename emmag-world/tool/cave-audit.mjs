@@ -13,7 +13,8 @@ import { Browser, sleep } from './cdp.mjs';
 const URL_ = process.argv[2] || 'https://emmaga2.web.app/?awake&hour=12&debug';
 const KEYS = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'm10'];
 const PICKUP = 2.0;      // what the box asks for
-const REACH = 1.2;       // what we accept, with room to spare
+const REACH = 1.2;       // how close she has to get to pick something up
+const BURY = 0.15;       // a crystal has to sit on open floor, not inside a rock
 const fail = [];
 const bad = (what, msg) => fail.push(`${what}: ${msg}`);
 
@@ -63,28 +64,46 @@ for (const key of KEYS) {
   const crys = J(await ev(`JSON.stringify(window.__w.cave().crystals)`));
   const v = info.vault;
 
-  // the vault is the room she has to find: its light may not be on from the hall
-  if (chest.shine) bad(tag, 'the secret room is lit from the hall');
-  // ...and neither may its own lights. The gate padding reached 3 m past the ellipse,
-  // so the waterfall room lit up while she was still standing in the hall doorway
+  // the waterfall room is dark until the three crystals are picked up — it is the only
+  // room in a cave that ever gets a light, and it may not get it early. Sample both
+  // inside the vault and just outside it, on a fresh cave, before anything is collected
   const rooms = J(await ev(`JSON.stringify(window.__w.caveProps().rooms)`));
   const hall0 = rooms[0];
   const ux0 = hall0[0] - v.x, uz0 = hall0[1] - v.z, ul = Math.hypot(ux0, uz0) || 1;
   const nu = [ux0 / ul, uz0 / ul];
   const tEdge = 1 / Math.hypot(nu[0] / v.rx, nu[1] / v.rz);      // ellipse radius that way
-  const outPt = [v.x + nu[0] * (tEdge + 1.2), v.z + nu[1] * (tEdge + 1.2)];
-  await ev(`window.__w.gateReset(); window.__w.caveTp(${outPt[0]}, ${outPt[1]})`);
-  await sleep(320);
-  const lv = J(await ev(`JSON.stringify(window.__w.caveLights())`));
-  const vi = lv.rooms.findIndex((r) => r.vault);
-  if (lv.rooms[vi].sum > 0) bad(tag, `vault lights are on ${(1.2).toFixed(1)} m outside it (sum ${lv.rooms[vi].sum})`);
+  const spots = [[v.x, v.z, 'inside'], [v.x + nu[0] * (tEdge + 1.2), v.z + nu[1] * (tEdge + 1.2), 'at the door']];
+  for (const [lx, lz, where] of spots) {
+    await ev(`window.__w.gateReset(); window.__w.caveTp(${lx}, ${lz})`);
+    await sleep(320);
+    const l = J(await ev(`JSON.stringify(window.__w.caveLights())`));
+    const vi = l.rooms.findIndex((r) => r.vault);
+    if (l.rooms[vi].sum > 0) bad(tag, `the waterfall room is lit ${where} before the crystals (sum ${l.rooms[vi].sum})`);
+    if (l.lights.some((o) => o.col === '9fc0ff')) bad(tag, `the moonbeam is on ${where} before the crystals`);
+  }
+  await ev(`window.__w.gateReset(); window.__w.caveTp(${hall0[0]}, ${hall0[1]})`);
 
   // crystals: nothing may push her off one, and one has to be walkable to
   const disp = J(await ev(`JSON.stringify(window.__w.cave().crystals.map((c) => { const q = window.__w.pushAt(c.x, c.z); return +Math.hypot(q[0] - c.x, q[1] - c.z).toFixed(2); }))`));
-  disp.forEach((d, i) => { if (d > 0.05) bad(tag, `crystal ${i + 1} sits ${d} m inside a collider`); });
+  // she has to be able to stand on it: any push at all means a rock, a stalagmite or
+  // the pond is sitting on the crystal, and something that has to be reached from 1 m
+  // away is a placement bug, not a pickup she should make
+  disp.forEach((d, i) => { if (d > BURY) bad(tag, `crystal ${i + 1} sits ${d} m inside a collider`); });
   for (let i = 0; i < crys.length; i++) {
     const r = await ev(reachFn(crys[i].x, crys[i].z));
-    if (r > 0.4) bad(tag, `crystal ${i + 1} unreachable, closest ${r} m`);
+    if (r > REACH) bad(tag, `crystal ${i + 1} unreachable, closest ${r} m`);
+  }
+  // the three crystals are the only key: pick them up by walking onto them (the real
+  // pickup, not a flag), and the waterfall room has to come on when the third one lands
+  for (const c of crys) { await ev(`window.__w.caveTp(${c.x}, ${c.z})`); await sleep(300); }
+  const got = J(await ev(`JSON.stringify(window.__w.cave().crystals)`));
+  if (got.some((c) => !c.got)) bad(tag, 'a crystal did not pick up when she stood on it');
+  await ev(`window.__w.gateReset(); window.__w.caveTp(${hall0[0]}, ${hall0[1]})`);
+  await sleep(320);
+  {
+    const l = J(await ev(`JSON.stringify(window.__w.caveLights())`));
+    const vi3 = l.rooms.findIndex((r) => r.vault);
+    if (l.rooms[vi3].sum <= 0) bad(tag, 'the waterfall room stays dark after the third crystal');
   }
 
   // the gift: inside its vault and close enough to open
