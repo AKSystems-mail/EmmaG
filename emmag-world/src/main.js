@@ -1422,7 +1422,12 @@ function checkBedtime(fakeMins) {
       sleepEl.querySelector('p').textContent = asCat
         ? 'Cats need their sleep too. Emma is tucked into her tent at camp.'
         : "She's tucked into her tent at camp. Fluffy is curled up by the fire.";
-      sleepEl.hidden = false; requestAnimationFrame(() => sleepEl.classList.add('fadein'));
+      sleepEl.hidden = false;
+      // one rAF is not enough: the display change and the class land in the same style
+      // recalc, so the transition never runs and the panel snaps in.  Read the layout
+      // first to commit the 0-opacity frame, then fade.
+      void sleepEl.offsetWidth;
+      sleepEl.classList.add('fadein');
     } else { sleepEl.classList.remove('fadein'); sleepEl.hidden = true; }
   }
   // the wall used to land between gathers and autosave, so the last one was lost
@@ -1811,7 +1816,7 @@ $('#camp').onclick = () => {
   // the tent goes up where she is standing, so step her out of it straight away
   [player.position.x, player.position.z] = pushOut(player.position.x, player.position.z);
   burst(new THREE.Vector3(c.x, 0.6, c.z), 0xffc07a, 18, 3);
-  sfx.chime(); toast('Camp made. Sit a while 🏕️');
+  sfx.chime(); toast('Setting up camp — the tent and fire take a few seconds 🏕️');
   hud();
 };
 
@@ -4218,11 +4223,13 @@ function caveDoorOpen(d) {
   caveBeacon(d);
 }
 
-// a doorway opening is easy to miss in the dark.  A column of light stands in
-// it for half a minute, a light pulses on the floor, and the map gets a dot.
-function caveBeacon(d) {
+// a doorway opening is easy to miss in the dark.  A column of light stands in it
+// for half a minute, a light pulses on the floor, and the map gets a dot.  Each door
+// keeps its own column: the vault's stays lit for good, so the way into the waterfall
+// room never goes dark when she opens another door or leaves the cave.
+function caveBeacon(d, from = player.position) {
   if (!caveRoom) return;
-  if (caveRoom.beacon) { caveScene.remove(caveRoom.beacon.g); caveRoom.beacon = null; }
+  if (caveRoom.beacons.has(d.id)) return;
   const g = new THREE.Group();
   const col = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.5, 9, 12, 1, true),
     new THREE.MeshBasicMaterial({ color: 0xc9a8ff, transparent: true, opacity: 0.34,
@@ -4235,11 +4242,11 @@ function caveBeacon(d) {
   const l = new THREE.PointLight(0xc9a8ff, 4, 18, 2); l.position.y = 2.2;
   g.add(col, pool, l);
   // stand it on her side of the wall, so she can see which way to walk
-  const off = d.axis === 'z' ? Math.sign((player.position.z - d.z) || -1) * 3.2 : 0;
-  const off2 = d.axis === 'x' ? Math.sign((player.position.x - d.x) || 1) * 3.2 : 0;
+  const off = d.axis === 'z' ? Math.sign((from.z - d.z) || -1) * 3.2 : 0;
+  const off2 = d.axis === 'x' ? Math.sign((from.x - d.x) || 1) * 3.2 : 0;
   g.position.set(d.x + off2, 0, d.z + off);
-  caveScene.add(g);
-  caveRoom.beacon = { g, col, pool, l, t: 0 };
+  caveRoom.g.add(g);        // goes with the cave, so a rebuild takes it away
+  caveRoom.beacons.set(d.id, { g, col, pool, l, t: 0, perma: d.kind === 'crystal' });
   sfx.unlock();
 }
 
@@ -4817,15 +4824,13 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
       cg.add(st);
     }
     const kit = cacheKit(ck);
+    // no glow sprite: the waterfall room is the only room that ever lights up, and a
+    // 2 m additive halo in a dark side room read as the vault's gold shine in the wrong
+    // room. The bundle carries its own light instead, so it shows once she is close.
     const bundle = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.4, 0.44),
-      new THREE.MeshStandardMaterial({ color: kit.col, emissive: 0x2a160a, roughness: 0.9, flatShading: true }));
+      new THREE.MeshStandardMaterial({ color: kit.col, emissive: 0x7a4416, emissiveIntensity: 0.85, roughness: 0.9, flatShading: true }));
     bundle.position.y = 1.14; bundle.rotation.y = 0.4;
     cg.add(bundle);
-    // a warm spot so a dark room still shows it from the doorway
-    const cgl = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTex, color: 0xffcf8a, transparent: true,
-      opacity: 0.42, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
-    cgl.scale.set(2.2, 2.2, 1); cgl.position.y = 1.3;
-    cg.add(cgl);
     const cgot = save.caches.includes(ck);
     cg.position.set(sp[0], 0, sp[1]);
     cg.visible = !cgot;
@@ -4853,7 +4858,11 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
     lake: { x: W(0, -6)[0], z: W(0, -6)[1], r: lr }, worms, mist,
     pond, shine, sheets, splash, fall: { x: 0, z: fallZ, w: fallW, h: fallH },
     frogs: [],   // spawned on the first caveTick: the GLB may still be in flight here
+    beacons: new Map(),
   };
+  // a cave she has already solved keeps its one landmark: the column at the entrance
+  // to the waterfall room, standing on the hall side where she first saw it
+  for (const d of doors) if (d.open && d.kind === 'crystal') caveBeacon(d, HALL);
   return caveRoom;
 }
 function enterCave(c) {
@@ -4875,7 +4884,6 @@ function enterCave(c) {
     camYaw = Math.PI; camNear = 6.6;
     lantern.intensity = 9;
     sfx.setEcho(true);
-    for (const d of caveRoom.doors) if (d.open && d.kind === 'crystal') caveBeacon(d);
     // the three lights were spent on the crystal door: a cave she has already solved
     // keeps its doors open, so it does not grow the crystals back
     const lit = caveRoom.doors.some((d) => d.open && d.kind === 'crystal');
@@ -5010,14 +5018,14 @@ function caveTick(dt, t) {
     openGate({ x: d.x, z: d.z, plain: true, onPass: () => caveDoorOpen(d) });
   }
 
-  if (caveRoom.beacon) {
-    const b = caveRoom.beacon;
+  for (const b of caveRoom.beacons.values()) {
     b.t += dt;
     const pulse = 0.5 + 0.5 * Math.sin(b.t * 2.4);
-    b.col.material.opacity = (b.t < 30 ? 0.34 : 0.12) * (0.6 + pulse * 0.4);
-    b.pool.material.opacity = (b.t < 30 ? 0.5 : 0.2) * (0.55 + pulse * 0.45);
+    const up = b.perma || b.t < 30;      // the hint fades, the vault's way in does not
+    b.col.material.opacity = (up ? 0.34 : 0.12) * (0.6 + pulse * 0.4);
+    b.pool.material.opacity = (up ? 0.5 : 0.2) * (0.55 + pulse * 0.45);
     b.pool.scale.setScalar(1 + pulse * 0.18);
-    b.l.intensity = (b.t < 30 ? 4 : 1.4) * (0.6 + pulse * 0.4);
+    b.l.intensity = (up ? 4 : 1.4) * (0.6 + pulse * 0.4);
   }
   // the waterfall room is the one lit room in a cave: its moonbeam comes on when the
   // third crystal is picked up and never goes off again, so a cave she has solved is
@@ -5489,10 +5497,11 @@ function maybeGift() {
 function feedDeer(d) {
   if (save.res.bloom < 2) { toast('A deer likes 2 Bloom.'); return; }
   save.res.bloom -= 2;
-  d.trust = 1; d.fed = 8;
-  burst(new THREE.Vector3(d.g.position.x, 1.5, d.g.position.z), 0xffd0e4, 14, 2.2);
-  sfx.chime(); hud(); persist();
-  toast('The deer eats from your hand 🌿');
+  d.trust = 1;
+  // it does not eat where it stopped: it walks the last half of the way in first, and
+  // the head only goes down once it is beside her (fed is set on arrival)
+  d.feedGo = { x: (d.g.position.x + player.position.x) / 2, z: (d.g.position.z + player.position.z) / 2 };
+  hud(); persist();
 }
 
 const deer = [];
@@ -5565,7 +5574,21 @@ function lifeTick(dt, t) {
     // re-arm the flee every frame, so it could never settle and never notice you
     if (dist < 9 && pSpd > 0.6 && !(d.trust && pSpd < 2.4)) d.flee = 1.8;
     let tx, tz, want;
-    if (d.fed > 0) {   // eating from her hand: stand still, head down
+    if (d.feedGo && (!d.trust || pSpd > 0.9)) {   // she walked off: give the bloom back, forget the hand
+      d.feedGo = null;
+      save.res.bloom += 2; hud(); persist();
+    }
+    if (d.feedGo) {   // closing the last half of the walk before the head goes down
+      tx = d.feedGo.x; tz = d.feedGo.z;
+      const gd = Math.hypot(tx - d.g.position.x, tz - d.g.position.z);
+      want = gd > 0.3 ? 1.35 : 0;
+      if (gd <= 0.35) {
+        d.feedGo = null; d.fed = 8;
+        burst(new THREE.Vector3(d.g.position.x, 1.5, d.g.position.z), 0xffd0e4, 14, 2.2);
+        sfx.chime();
+        toast('The deer eats from your hand 🌿');
+      }
+    } else if (d.fed > 0) {   // eating from her hand: stand still, head down
       tx = d.g.position.x; tz = d.g.position.z; want = 0;
     } else if (d.flee > 0) {
       d.flee -= dt;
@@ -6669,6 +6692,9 @@ function tick() {
 
   leafTick(t, dt);
 
+  // an awake stone turns on its own; the sleeping ones hold still
+  for (const lm of landmarks.values()) if (lm.done) lm.stone.rotation.y += dt * 0.35;
+
   // fireflies come out after dark — none while the sun is up. they hang where they are
   // and glow on for a second, off for a second, then rest eight: a ten-second cycle of
   // which two seconds are lit. they wander a little around the spot they live in, and
@@ -6725,7 +6751,8 @@ function tick() {
   lifeTick(dt, t);
 
   for (const c of camps) {
-    c.light.intensity = night * 2.2 * (0.85 + Math.sin(t * 7 + c.g.position.x) * 0.15);
+    // `night` used to exist; dayLight is the one number the sky drives now
+    c.light.intensity = (1 - dayLight) * 2.2 * (0.85 + Math.sin(t * 7 + c.g.position.x) * 0.15);
     c.fire.scale.y = 0.85 + Math.sin(t * 9 + c.g.position.z) * 0.2;
     if (c.bird) c.bird.visible = hourNow >= 5 && hourNow < 9;
   }
@@ -6835,7 +6862,7 @@ if (DBG) window.__w = {
   caveDoors: () => (caveRoom ? caveRoom.doors.map((d) => ({ id: d.id, open: d.open, plug: d.g ? d.g.visible : null, arch: d.ring ? d.ring.visible : null })) : []),
   caveSolids: () => (caveRoom && caveRoom.solids ? caveRoom.solids.map((r) => ({ x: +r.x.toFixed(1), z: +r.z.toFixed(1), r: +r.r.toFixed(2) })) : []),
   bigR: () => bigRange,
-  beacon: () => (caveRoom && caveRoom.beacon ? { t: +caveRoom.beacon.t.toFixed(1), x: +caveRoom.beacon.g.position.x.toFixed(1), z: +caveRoom.beacon.g.position.z.toFixed(1) } : null),
+  beacon: () => (caveRoom ? [...caveRoom.beacons.entries()].map(([id, b]) => ({ id, perma: b.perma, t: +b.t.toFixed(1), i: +b.l.intensity.toFixed(2), x: +b.g.position.x.toFixed(1), z: +b.g.position.z.toFixed(1) })) : []),
   cdoor: (id) => { const d = caveRoom && caveRoom.doors.find((x) => x.id === id); if (d) caveDoorOpen(d); },
   caveGround: (x, z) => caveGround(x, z),
   pondsDbg: () => [...ponds.values()].map((p) => [Math.round(p.x), Math.round(p.z), Math.round(p.r)]),
@@ -6958,7 +6985,7 @@ if (DBG) window.__w = {
     const u = fluffy.userData;
     return { cat: w(fluffy), tip: u.tail.length ? w(u.tail[u.tail.length - 1]) : null, legs: u.legs.length, bones: !!u.bones }; },
   tail: () => ({ a: +tailA.toFixed(2) }),
-  stones: () => [...landmarks.values()].map((l) => [+l.x.toFixed(1), +l.z.toFixed(1), l.done, l.key]),
+  stones: () => [...landmarks.values()].map((l) => [+l.x.toFixed(1), +l.z.toFixed(1), l.done, l.key, +l.stone.rotation.y.toFixed(2)]),
   camps: () => camps.map((c) => ({ i: c.i, x: +c.x.toFixed(1), z: +c.z.toFixed(1), kids: c.g.children.length, props: ((save.camps[c.i] || {}).props || []).length })),
   deco: (i = 0) => { const c = camps[i]; if (!c) return -1; decorateCamp(c); return ((save.camps[c.i] || {}).props || []).length; },
   pack: (i = 0) => { const c = camps[i]; if (!c) return -1; packCamp(c); return camps.length; },
