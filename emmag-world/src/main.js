@@ -50,7 +50,7 @@ if (!save.gates.length) save.gates.push(regionKey(save.x, save.z));
 save.friends ||= []; save.camps ||= []; save.fireflies ||= false;
 save.journal ||= []; save.badges ||= []; save.catches ||= []; save.notes ||= [];
 save.garden ||= []; save.gifts ||= 0; save.names ||= {}; save.postcards ||= [];
-save.caves ||= []; save.treasure ||= []; save.caches ||= [];
+save.caves ||= []; save.treasure ||= []; save.caches ||= []; save.lit ||= [];
   save.mathLvl ||= 0; save.mStreak ||= 0; save.mMiss ||= 0; save.quests ||= {}; save.giant ||= false; save.giantN ||= 0; save.decor ||= [];
 save.crossed ||= 0; save.bestSkip ||= 0; save.boat ||= false;
 save.painting ||= ''; save.giftDay ||= '';
@@ -534,47 +534,23 @@ const swapGeo = (key, url, h) => loadPack(url, (gl) => {
 swapGeo('crystal', '/models/crystal_rock.glb', 0.8);
 swapGeo('flower', '/models/flower_hib.glb', 0.42);
 
-// authored hot-air balloon: a POSITION-only blockout, so normals and a two-tone
-// vertex colour get built once here and every camp reuses the geometry
-let balloonGeo = null;
+// scanned balloon (copy #3 of a 4-copy sheet): 2.5k tris with its own 512 map,
+// fitted so the basket floor sits at y=0 and every camp clones the same proto
+let balloonProto = null;
 const balloonWaiters = [];
-loadPack('/models/balloon.glb', (gl) => {
-  let src = null; gl.scene.traverse((o) => { if (!src && o.isMesh) src = o; });
-  if (!src) return;
-  const geo = src.geometry.clone().applyMatrix4(src.matrixWorld);
-  geo.deleteAttribute('normal');
-  geo.computeVertexNormals();
-  const p = geo.attributes.position, col = new Float32Array(p.count * 3);
-  const brown = new THREE.Color(0xa5794a), pink = new THREE.Color(0xf2a0c8);
-  for (let k = 0; k < p.count; k++) {
-    const y = p.getY(k), r = Math.hypot(p.getX(k), p.getZ(k));
-    const c = y < -0.66 && (r > 0.2 || y < -0.75) ? brown : pink;  // basket frustum vs envelope
-    col[k * 3] = c.r; col[k * 3 + 1] = c.g; col[k * 3 + 2] = c.b;
-  }
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  balloonGeo = geo;
+loadPack('/models/balloon.glb?v=3', (gl) => {
+  const ps = fitAll(partsOf(gl), 2.88);
+  balloonProto = new THREE.Mesh(ps[0].geo, ps[0].mat);
+  balloonProto.castShadow = true;
   for (const f of balloonWaiters) f();
   balloonWaiters.length = 0;
 });
 
 function dressBalloon(g) {
-  if (!balloonGeo) { balloonWaiters.push(() => dressBalloon(g)); return; }
-  const env = new THREE.Mesh(balloonGeo, mat({ vertexColors: true }));
-  env.scale.setScalar(0.9);
-  env.position.y = 1.73;          // basket floor lands on 0.65, where she sits during the ride
-  env.castShadow = true;
+  if (!balloonProto) { balloonWaiters.push(() => dressBalloon(g)); return; }
+  const env = balloonProto.clone();
+  env.position.y = 0.65;          // basket floor, where she sits during the ride
   g.add(env);
-  const up = new THREE.Vector3(0, 1, 0);
-  for (let k = 0; k < 4; k++) {          // four lines down to the basket corners
-    const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
-    const p0 = new THREE.Vector3(Math.cos(a) * 0.12, 1.19, Math.sin(a) * 0.12);
-    const p1 = new THREE.Vector3(Math.cos(a) * 0.26, 1.10, Math.sin(a) * 0.26);
-    const d = p1.clone().sub(p0);
-    const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, d.length(), 4), mat({ color: 0x6b5b3a }));
-    rope.position.copy(p0).addScaledVector(d, 0.5);
-    rope.quaternion.setFromUnitVectors(up, d.normalize());
-    g.add(rope);
-  }
 }
 
 // reeds and flowers scattered by ponds and cave mouths: world-space spot lists
@@ -1177,7 +1153,9 @@ fluffy.name = 'fluffy';
 scene.add(fluffy);
 window.__fluffy = fluffy;
 
-new GLTFLoader().load('/models/fluffy.glb', (g) => {
+// retopo'd scan bound to fluffy's rig — ?cat=fluffy falls back to the old model
+const CATFILE = new URLSearchParams(location.search).get('cat') || 'fluffy2';
+new GLTFLoader().load(`/models/${CATFILE}.glb`, (g) => {
   if (fluffy.userData.tux) return;   // the newer rigged cat already won
   const inst = g.scene, B = {};
   inst.traverse((o) => {
@@ -1212,44 +1190,17 @@ new GLTFLoader().load('/models/fluffy.glb', (g) => {
     earL: B.earL || null, earR: B.earR || null,
     restEarL: B.earL ? B.earL.quaternion.clone() : null,
     restEarR: B.earR ? B.earR.quaternion.clone() : null,
+    // the scan's legs are stubbier and its rest tail hangs instead of sitting up, so it needs
+    // a longer stride per cycle and a tail lift that reaches "up" at a walking speed
+    ...(CATFILE === 'fluffy2' ? { stride: 1.55, tailCurl: 0.78, tailLo: 0.35, tailSpan: 1.15 } : {}),
   });
   inner.userData.legacy = true;
   window.__fluffyBones = B;
 }, undefined, (e) => console.warn('fluffy.glb', e));
 
-// Fluffy v2 — the authored tuxedo cat: 12 bones, real Idle/Walk/Trot/Sit/Loaf clips.
-// Sits in the same group, so all the follow/ground/pet logic is untouched.
-// Fluffy v2 — the authored tuxedo cat: 2192 tris, 16 bones, 5 baked clips, 4 material slots.
-new GLTFLoader().load('/models/tuxedo.glb', (g) => {
-  const inst = g.scene;
-  const skin = (m) => toon({ color: m.color, gradientMap: toonSoft, flatShading: false });
-  inst.traverse((o) => {
-    if (!o.isMesh) return;
-    o.castShadow = true;
-    o.frustumCulled = false;
-    o.material = Array.isArray(o.material) ? o.material.map(skin) : skin(o.material);
-  });
-  for (const ch of [...fluffy.children]) if (ch.userData.legacy) fluffy.remove(ch);
-  fluffy.userData.tux = true;
-  const holder = new THREE.Group();
-  holder.add(inst);
-  holder.scale.setScalar(1.24);            // 0.40 m asset -> ~0.50 m, adult not kitten
-  fluffy.add(holder);
-  const mix = new THREE.AnimationMixer(inst);
-  const acts = {};
-  for (const c of g.animations) acts[c.name] = mix.clipAction(c);
-  // ponytail: only Idle starts playing. setEffectiveWeight(0) also zeroes .weight, which
-  // multiplies the crossfade ramp -> everything stayed weight 0 and the cat slid in bind pose.
-  if (acts.Idle) acts.Idle.play();
-  for (const n of ['Sit', 'Loaf']) {
-    if (!acts[n]) continue;
-    acts[n].setLoop(THREE.LoopOnce, 1);
-    acts[n].clampWhenFinished = true;
-  }
-  const tail = inst.getObjectByName('Tail_1');
-  Object.assign(fluffy.userData, { mix, acts, clip: 'Idle', tail, holder });
-}, undefined, (e) => console.warn('tuxedo cat', e));
-
+// The scanned tuxedo cat is parked: its legs are fused into the belly, so a sit can only
+// swing them and a loaf tears the seam. The fluffy.glb cat with the procedural sit/loaf
+// (catDrop + FU.bones below) is the one that reads right in game.
 const fShadow = shadowBlob(0.55);
 
 const wingShape = (() => {
@@ -1436,11 +1387,14 @@ function checkBedtime(fakeMins) {
 checkBedtime();
 setInterval(checkBedtime, 5000);   // 30 s was too coarse to land a one-minute warning
 
-$('#mute').onclick = () => {
-  sfx.muted = !sfx.muted;
+// the sound switch belongs to the save, not to the tab: muting is a decision she makes
+// once on the tablet and it stays made
+const paintMute = () => {
   if (sfx.master) sfx.master.gain.value = sfx.muted ? 0 : 0.42;
   $('#mute').textContent = sfx.muted ? '✕' : '♪';
 };
+$('#mute').onclick = () => { sfx.muted = !sfx.muted; save.mute = sfx.muted; paintMute(); persist(); };
+sfx.muted = !!save.mute; paintMute();
 
 // ---------------------------------------------------------------- landmarks
 const landmarks = new Map();
@@ -2217,6 +2171,7 @@ function pushOut(x, z) {
         : SOLID[n.type];
       if (!r) continue;
       const rr = r * n.s + PR;
+      if (isGone(n)) continue;   // chopped or mined: invisible, so not solid either
       if (!near(n.x, n.z)) continue;
       const dx = px - n.x, dz = pz - n.z, d2 = dx * dx + dz * dz;
       if (d2 < rr * rr && d2 > 1e-6) {
@@ -3339,7 +3294,9 @@ function updateNear() {
   // a deer close enough to hand a flower to — it beats sitting by a campfire
   if (!inBoat && !fishing && !mini && !skipStone && !inCave && save.res.bloom >= 2) {
     for (const d of deer) {
-      if (d.K) continue;
+      // already fed or already walking in to feed: tapping again would spend another two
+      // bloom for a walk it is on anyway
+      if (d.K || d.fed > 0 || d.feedGo) continue;
       const dd = Math.hypot(d.g.position.x - px, d.g.position.z - pz);
       // beats a campfire and a cat in the way: Fluffy trails you, so she was stealing the
       // Feed button every time a deer walked up
@@ -4862,7 +4819,7 @@ function buildCave(key, forceKind) {  if (caveRoom && caveKey === key && !forceK
   };
   // a cave she has already solved keeps its one landmark: the column at the entrance
   // to the waterfall room, standing on the hall side where she first saw it
-  for (const d of doors) if (d.open && d.kind === 'crystal') caveBeacon(d, HALL);
+  for (const d of doors) if (d.kind === 'crystal' && (d.open || save.lit.includes(key))) caveBeacon(d, HALL);
   return caveRoom;
 }
 function enterCave(c) {
@@ -4886,7 +4843,9 @@ function enterCave(c) {
     sfx.setEcho(true);
     // the three lights were spent on the crystal door: a cave she has already solved
     // keeps its doors open, so it does not grow the crystals back
-    const lit = caveRoom.doors.some((d) => d.open && d.kind === 'crystal');
+    // the three crystals stay spent once they are spent, door answered or not: leaving
+    // without opening the wall used to grow them back and put the light out
+    const lit = save.lit.includes(caveKey) || caveRoom.doors.some((d) => d.open && d.kind === 'crystal');
     if (lit) caveFound = 3;
     for (const k of caveRoom.crystals) {
       k.got = lit; k.g.visible = !lit; k.light.intensity = lit ? 0 : (caveRoom.glow ? 1.5 : 0);
@@ -4986,6 +4945,7 @@ function caveTick(dt, t) {
         // light the door now, not when she blunders into it in the dark
         const d = caveRoom.doors.find((o) => o.kind === 'crystal');
         if (d) { d.quiet = false; caveBeacon(d); }
+        if (!save.lit.includes(caveKey)) { save.lit.push(caveKey); persist(); }
         toast('Three lights are lit — the back wall is waiting for an answer');
       }
     }
@@ -5022,6 +4982,8 @@ function caveTick(dt, t) {
     b.t += dt;
     const pulse = 0.5 + 0.5 * Math.sin(b.t * 2.4);
     const up = b.perma || b.t < 30;      // the hint fades, the vault's way in does not
+    b.g.visible = up;                    // and it goes out: only the waterfall room is lit
+    if (!up) continue;
     b.col.material.opacity = (up ? 0.34 : 0.12) * (0.6 + pulse * 0.4);
     b.pool.material.opacity = (up ? 0.5 : 0.2) * (0.55 + pulse * 0.45);
     b.pool.scale.setScalar(1 + pulse * 0.18);
@@ -5150,7 +5112,13 @@ for (const P of Object.values(ANIM_DEER)) {
 function makeAnimatedDeer(x, z, kind) {
   const P = ANIM_DEER[kind];
   const g = new THREE.Group(), inst = skClone(P.src);
-  inst.traverse((o) => { if (o.isMesh) o.material = o.material.clone(); });
+  inst.traverse((o) => {
+    if (!o.isMesh) return;
+    o.material = o.material.clone();
+    // the coat reads near-black in daylight (baseColorFactor is linear, so Main lands ~0.52
+    // sRGB). Lift the tint -- eyes, hooves and antlers stay as they are.
+    if (/^(Main|Fur)/.test(o.material.name || '')) o.material.color.multiplyScalar(1.9);
+  });
   inst.rotation.y = P.rot || 0;
   g.add(inst);
   g.scale.setScalar(P.S);
@@ -5184,7 +5152,10 @@ function makeRiggedDeer(x, z, kind) {
     B[o.name] = o;
     if (o.isMesh) {
       o.material = o.material.clone();
-      if (!buck && borrowed && o.material.name === 'Fur') o.material.color.setHex(0xc08a5c);
+      // the scanned fur reads near-black in daylight. The map multiplies the tint, so lifting
+      // the tint brightens the coat without washing out the texture.
+      if (/^(Main|Fur)/.test(o.material.name || '')) o.material.color.multiplyScalar(1.9);
+      if (!buck && borrowed && o.material.name === 'Fur') o.material.color.setHex(0xcf9a68);
     }
   });
   if (!buck && borrowed) for (const n of ['antL', 'antR']) if (B[n]) B[n].scale.setScalar(0.001);
@@ -5495,12 +5466,18 @@ function maybeGift() {
 
 
 function feedDeer(d) {
+  // already walking in or already eating: charging again would take two more bloom for a
+  // walk it is on anyway (the button hides itself, this is the guard behind it)
+  if (d.fed > 0 || d.feedGo) return;
   if (save.res.bloom < 2) { toast('A deer likes 2 Bloom.'); return; }
   save.res.bloom -= 2;
   d.trust = 1;
   // it does not eat where it stopped: it walks the last half of the way in first, and
   // the head only goes down once it is beside her (fed is set on arrival)
-  d.feedGo = { x: (d.g.position.x + player.position.x) / 2, z: (d.g.position.z + player.position.z) / 2 };
+  const mx = (d.g.position.x + player.position.x) / 2, mz = (d.g.position.z + player.position.z) / 2;
+  // a midpoint out in the lake is a walk it cannot finish: feed it at the bank instead
+  d.feedGo = inWater(mx, mz, 1.0) ? { x: d.g.position.x, z: d.g.position.z } : { x: mx, z: mz };
+  d.flee = 0;
   hud(); persist();
 }
 
@@ -6386,7 +6363,7 @@ function tick() {
   // ponytail: the hop lifted the old procedural legs off the ground; the GLB rig has real
   // clips, so hopping it just bounces the whole cat while it stands.
   const fHop = inBoat || fluffy.userData.tux ? 0
-    : Math.sin(t * 7) * 0.03 * (1 - catSit) + (fMoved > 0.01 ? 0.03 : 0);
+    : Math.sin(t * 7) * 0.03 * Math.min(1, (dt > 1e-4 ? fMoved / dt : 0)) * (1 - catSit);
   // the pelvis drops by exactly what the ~29 deg torso tilt lifts the shoulders, so a
   // sitting cat keeps straight, vertical front legs instead of floating on them
   const catDrop = fluffy.userData.mix ? 0 : 0.60 * Math.sin(0.50 * catSit) * (1 - catLie) + 0.205 * catLie;
@@ -6397,7 +6374,7 @@ function tick() {
   // ---- Fluffy's rig. The legs trot, fold under in a sit, and vanish in a loaf.
   const FU = fluffy.userData;
   const catSpd = dt > 1e-4 ? fMoved / dt : 0;   // closing speed: legs keep up while it decelerates
-  fPh = (fPh + fMoved / 0.62 * Math.PI * 2) % (Math.PI * 200);
+  fPh = (fPh + fMoved / (fluffy.userData.stride || 0.62) * Math.PI * 2) % (Math.PI * 200);
   if (FU.mix) {
     // Sit/Loaf clips are hand-baked in Blender (catbake.py) — the shipped ones left the
     // cat standing. Front paws sit at y=0 and the rump lands within 8 mm of the ground.
@@ -6455,13 +6432,15 @@ function tick() {
 
   // tail: lifts when she moves, waves when she stops.  No chain sim needed now
   // that five bones can carry the curl.
-  const wantTail = petT > 0 ? 1 : THREE.MathUtils.clamp((catSpd - 1.1) / 3.2, 0, 1);
+  const FU0 = fluffy.userData;
+  const wantTail = petT > 0 ? 1
+    : THREE.MathUtils.clamp((catSpd - (FU0.tailLo ?? 1.1)) / (FU0.tailSpan ?? 3.2), 0, 1);
   // up eagerly with the gait, down gently once she stops (k 6 / d 8 is overdamped: ~1 s fall)
   [tailA, tailV] = spring(tailA, tailV, wantTail, wantTail > tailA ? 26 : 6, 8, dt);
   if (FU.bones) {
     for (let i = 0; i < FU.tail.length; i++) {
       const still = 1 - Math.min(1, catLie);   // a loafing cat holds the tail still
-      const lift = tailA * 0.30 - 0.45 * catLie + Math.sin(t * 1.5 + i * 0.6) * 0.035 * still;
+      const lift = tailA * (FU.tailCurl ?? 0.30) - 0.45 * catLie + Math.sin(t * 1.5 + i * 0.6) * 0.035 * still;
       const swish = Math.sin(t * 2.2 - i * 0.8) * (0.05 + 0.10 * tailA) * still;
       FU.tail[i].quaternion.copy(FU.tailRest[i])
         .multiply(_qx.setFromAxisAngle(_AX, lift))
@@ -6859,10 +6838,10 @@ if (DBG) window.__w = {
   spot: (i, j) => { const q = spot(i, j); return { x: Math.round(q.x), z: Math.round(q.z) }; },
   obj: () => ({ id: objId, list: objList.map((o) => ({ id: o.id, label: o.label, x: Math.round(o.x), z: Math.round(o.z), d: Math.round(Math.hypot(o.x - player.position.x, o.z - player.position.z)) })) }),
   big: () => ({ open: bigOpen, pins: objList.length }),
-  caveDoors: () => (caveRoom ? caveRoom.doors.map((d) => ({ id: d.id, open: d.open, plug: d.g ? d.g.visible : null, arch: d.ring ? d.ring.visible : null })) : []),
+  caveDoors: () => (caveRoom ? caveRoom.doors.map((d) => ({ id: d.id, kind: d.kind, open: d.open, plug: d.g ? d.g.visible : null, arch: d.ring ? d.ring.visible : null })) : []),
   caveSolids: () => (caveRoom && caveRoom.solids ? caveRoom.solids.map((r) => ({ x: +r.x.toFixed(1), z: +r.z.toFixed(1), r: +r.r.toFixed(2) })) : []),
   bigR: () => bigRange,
-  beacon: () => (caveRoom ? [...caveRoom.beacons.entries()].map(([id, b]) => ({ id, perma: b.perma, t: +b.t.toFixed(1), i: +b.l.intensity.toFixed(2), x: +b.g.position.x.toFixed(1), z: +b.g.position.z.toFixed(1) })) : []),
+  beacon: () => (caveRoom ? [...caveRoom.beacons.entries()].map(([id, b]) => ({ id, perma: b.perma, v: b.g.visible, t: +b.t.toFixed(1), i: +b.l.intensity.toFixed(2), x: +b.g.position.x.toFixed(1), z: +b.g.position.z.toFixed(1) })) : []),
   cdoor: (id) => { const d = caveRoom && caveRoom.doors.find((x) => x.id === id); if (d) caveDoorOpen(d); },
   caveGround: (x, z) => caveGround(x, z),
   pondsDbg: () => [...ponds.values()].map((p) => [Math.round(p.x), Math.round(p.z), Math.round(p.r)]),

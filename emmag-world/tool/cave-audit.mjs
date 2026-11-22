@@ -43,20 +43,28 @@ const p = await b.newPage({ width: 800, height: 600, dsf: 1 });
 const ev = (x) => p.eval(x);
 const J = (x) => JSON.parse(x);
 
+// leave and walk back in. `kind` forces a real rebuild: without it buildCave() returns
+// the room still standing behind the fade, so the restore path never runs and a re-entry
+// check passes on a cave that was never rebuilt
+async function enter(key, kind) {
+  await ev(`window.__w.caveOut?.()`); await sleep(1400);
+  await ev(`window.__w.caveTest('${key}'${kind ? `, '${kind}'` : ''})`);
+  for (let i = 0; i < 40; i++) {
+    await sleep(280);
+    const c = J(await ev(`JSON.stringify(window.__w.cave())`));
+    if (c.in && c.key === key) return c;
+  }
+  return null;
+}
+
 await p.goto(URL_, { timeoutMs: 120000, settleMs: 3000, cacheBust: true });
 await ev(`document.querySelector('#go')?.click()`);
 await sleep(1500);
 
 for (const key of KEYS) {
-  await ev(`window.__w.caveOut?.()`); await sleep(1000);
-  await ev(`window.__w.caveTest('${key}')`);
   // wait for THIS cave, not the one still standing from the last loop
   let info = null;
-  for (let i = 0; i < 40; i++) {
-    await sleep(280);
-    const c = J(await ev(`JSON.stringify(window.__w.cave())`));
-    if (c.in && c.key === key) { info = J(await ev(`JSON.stringify(window.__w.caveRoomInfo())`)); break; }
-  }
+  if (await enter(key)) info = J(await ev(`JSON.stringify(window.__w.caveRoomInfo())`));
   if (!info) { bad(key, 'cave never built'); continue; }
   await sleep(400);   // the entry fade moves her to the mouth 300ms in: do not sample mid-transition
   const tag = `${key} ${info.kind}`;
@@ -106,6 +114,19 @@ for (const key of KEYS) {
     if (l.rooms[vi3].sum <= 0) bad(tag, 'the waterfall room stays dark after the third crystal');
   }
 
+  // three crystals spent is spent: leaving without answering the wall may not grow them
+  // back or put the waterfall room out
+  {
+    const back = await enter(key, info.kind);
+    if (!back) bad(tag, 'cave never rebuilt after leaving with three crystals');
+    else {
+      if (!back.crystals.every((k) => k.got)) bad(tag, 'the crystals came back after leaving mid-cave');
+      const l = J(await ev(`JSON.stringify(window.__w.caveLights())`));
+      if (l.rooms[l.rooms.findIndex((r) => r.vault)].sum <= 0) bad(tag, 'the waterfall room went dark after leaving mid-cave');
+      if (!J(await ev(`JSON.stringify(window.__w.beacon())`)).some((o) => o.perma)) bad(tag, 'the doorway column did not come back with the crystals');
+    }
+  }
+
   // the gift: inside its vault and close enough to open
   const [cx, cz] = chest.w;
   const e = ((cx - v.x) / v.rx) ** 2 + ((cz - v.z) / v.rz) ** 2;
@@ -150,18 +171,14 @@ for (const key of KEYS) {
     if (thru > 2) bad(tag, `door ${id} open but blocked (closest ${thru} m)`);
   }
   // a cave she has already solved keeps its doors open and grows no new crystals
-  await ev(`window.__w.caveOut?.()`); await sleep(1400);
-  await ev(`window.__w.caveTest('${key}')`);
-  let back = null;
-  for (let i = 0; i < 40; i++) {
-    await sleep(280);
-    const c = J(await ev(`JSON.stringify(window.__w.cave())`));
-    if (c.in && c.key === key) { back = c; break; }
-  }
+  const back = await enter(key, info.kind);
   if (!back) bad(tag, 'cave never rebuilt on the second visit');
   else {
     if (!back.crystals.every((k) => k.got)) bad(tag, 'crystals came back after the door was opened');
     if (!J(await ev(`JSON.stringify(window.__w.caveDoors())`)).some((d) => d.open)) bad(tag, 'the open door closed itself');
+    const bk = J(await ev(`JSON.stringify(window.__w.beacon())`)).filter((o) => o.perma);
+    const lit = J(await ev(`JSON.stringify(window.__w.caveDoors())`)).filter((d) => d.kind === 'crystal');
+    if (lit.length && !bk.length) bad(tag, 'the waterfall doorway is dark on the second visit');
   }
   // ...and it still lights up once she is standing in it. Teleporting into the vault
   // arms the gift gate, which would block the reach walks above, so this goes last
