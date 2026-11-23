@@ -539,7 +539,7 @@ swapGeo('flower', '/models/flower_hib.glb', 0.42);
 let balloonProto = null;
 const balloonWaiters = [];
 loadPack('/models/balloon.glb?v=3', (gl) => {
-  const ps = fitAll(partsOf(gl), 2.88);
+  const ps = fitAll(partsOf(gl), 3.15);
   balloonProto = new THREE.Mesh(ps[0].geo, ps[0].mat);
   balloonProto.castShadow = true;
   for (const f of balloonWaiters) f();
@@ -550,6 +550,7 @@ function dressBalloon(g) {
   if (!balloonProto) { balloonWaiters.push(() => dressBalloon(g)); return; }
   const env = balloonProto.clone();
   env.position.y = 0.65;          // basket floor, where she sits during the ride
+  g.userData.env = env;           // the frame loop bobs it
   g.add(env);
 }
 
@@ -1192,7 +1193,7 @@ new GLTFLoader().load(`/models/${CATFILE}.glb`, (g) => {
     restEarR: B.earR ? B.earR.quaternion.clone() : null,
     // the scan's legs are stubbier and its rest tail hangs instead of sitting up, so it needs
     // a longer stride per cycle and a tail lift that reaches "up" at a walking speed
-    ...(CATFILE === 'fluffy2' ? { stride: 1.55, tailCurl: 0.78, tailLo: 0.35, tailSpan: 1.15 } : {}),
+    ...(CATFILE === 'fluffy2' ? { stride: 1.55 } : {}),
   });
   inner.userData.legacy = true;
   window.__fluffyBones = B;
@@ -2613,7 +2614,8 @@ function startRide(to) {
   sfx.blip(300, 0.9, 'sine', 0.10);
 }
 
-// 2.5 s, three beats: rise, cut behind black, descend and step out
+// hop: 1.0 s up, a 0.3 s cut behind black, then a 0.95 s drop with one small
+// bounce before it settles -- 2.25 s door to door
 function rideTick(dt) {
   const r = riding;
   r.t += dt;
@@ -2623,13 +2625,13 @@ function rideTick(dt) {
     fluffy.position.set(b.x + 0.85, y + 0.5, b.z);
   };
   if (r.phase === 'up') {
-    const u = Math.min(1, r.t / 1.0), e = u * u * (3 - 2 * u);
-    r.from.balloon.position.y = e * 20;
-    seat(r.from, e * 20);
+    const u = Math.min(1, r.t / 1.0), y = (1 - (1 - u) ** 3) * 20;
+    r.from.balloon.position.y = y;
+    seat(r.from, y);
     player.rotation.y = Math.PI;
     if (u >= 1) { $('#fade').classList.add('on'); r.phase = 'cut'; r.t = 0; sfx.blip(760, 0.5, 'sine', 0.08); }
   } else if (r.phase === 'cut') {
-    if (r.t >= 0.32) {                       // the overlay's own 0.3 s
+    if (r.t >= 0.3) {                        // the overlay's own 0.3 s
       r.from.balloon.position.y = 0;
       r.to.balloon.position.y = 20;
       seat(r.to, 20);
@@ -2638,9 +2640,11 @@ function rideTick(dt) {
       r.phase = 'down'; r.t = 0;
     }
   } else if (r.phase === 'down') {
-    const u = Math.min(1, r.t / 0.95), e = u * u;
-    r.to.balloon.position.y = 20 * (1 - e);
-    seat(r.to, 20 * (1 - e));
+    const u = Math.min(1, r.t / 0.95);
+    const bump = u > 0.82 ? Math.sin((u - 0.82) / 0.18 * Math.PI) * 0.3 : 0;
+    const y = 20 * (1 - u) ** 2 + bump;
+    r.to.balloon.position.y = y;
+    seat(r.to, y);
     if (u >= 1) { r.phase = 'settle'; r.t = 0; }
   } else {
     const b = basketAt(r.to);
@@ -6231,6 +6235,11 @@ function tick() {
   bridgeY = groundAt(player.position.x, player.position.z);
   if (!moving) player.position.y += (bridgeY - player.position.y) * Math.min(1, dt * 8);
   if (riding) rideTick(dt);   // last word on her position this frame
+  // a parked balloon is floating, not planted: 6 cm of slow bob, phase offset per camp
+  for (const c of camps) {
+    const e = c.balloon && c.balloon.userData.env;
+    if (e && !riding) e.position.y = 0.65 + Math.sin(t * 2.4 + c.i * 1.7) * 0.06;
+  }
 
   swingE += ((moving && !inBoat ? 0.55 : 0) - swingE) * Math.min(1, dt * 10);
   const { arms, legs } = player.userData;
@@ -7075,6 +7084,7 @@ if (DBG) window.__w = {
   teleportMenu: () => { openTeleport(); return $('#tplist').textContent; },
   rideTo: (i = 0) => { const c = camps[i]; if (!c) return null; startRide(c); return campName(c); },
   ridingNow: () => (riding ? riding.phase : null),
+  ride: (i) => { if (camps[i]) { startRide(camps[i]); return true; } return false; },
   catDbg: () => ({ slot: (fluffy.userData.slot || []).map((v) => +v.toFixed(2)), gap: +(fluffy.userData.gap || 0).toFixed(3), spd: +(fluffy.userData.step || 0).toFixed(2), clip: fluffy.userData.clip, pos: fluffy.position.toArray().map((v) => +v.toFixed(2)) }),
   tux: () => ({ on: !!fluffy.userData.mix, clip: fluffy.userData.clip, clips: Object.keys(fluffy.userData.acts || {}) }),
   caveGo: (i = 0) => { const c = [...caves.values()][i]; if (!c) return false; enterCave(c); return true; },
