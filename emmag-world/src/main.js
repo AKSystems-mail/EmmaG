@@ -546,6 +546,36 @@ loadPack('/models/balloon.glb?v=3', (gl) => {
   balloonWaiters.length = 0;
 });
 
+// camp furniture: the tent by J-Toastie (kept the old pink) and the Poly
+// campfire (kept the flicker). both are fitted once and cloned per camp.
+const PINK = new THREE.Color(0xd98cb0), PINK_DARK = new THREE.Color(0x8f5c74);
+let tentProto = null, fireProto = null;
+const campWait = [];                                    // camps made before the models land
+const fillCamps = () => { for (const f of campWait) f(); };   // guards make this safe to re-run
+loadPack('/models/tent.glb', (gl) => {
+  const ps = fitAll(partsOf(gl), 1.72);
+  // the model ships two panels; the brighter one takes the old tent pink and
+  // the darker one a shade of it, so its two-tone still reads
+  for (const p of ps) {
+    const m = p.mat, lum = m.color ? m.color.r + m.color.g + m.color.b : 1.5;
+    m.color.copy(lum > 0.9 ? PINK : PINK_DARK);
+  }
+  tentProto = new THREE.Mesh(bake(ps), packMat());
+  tentProto.rotation.y = 0;
+  tentProto.castShadow = true;
+  fillCamps();
+});
+loadPack('/models/campfire.glb', (gl) => {
+  const ps = fitAll(partsOf(gl), 0.85);
+  fireProto = new THREE.Mesh(ps[0].geo, ps[0].mat);
+  fireProto.castShadow = true;
+  const m = fireProto.material;
+  if (m.map) m.emissiveMap = m.map;                    // the flames light themselves
+  m.emissive = new THREE.Color(0xff7a2a);
+  m.emissiveIntensity = 0.3;
+  fillCamps();
+});
+
 function dressBalloon(g) {
   if (!balloonProto) { balloonWaiters.push(() => dressBalloon(g)); return; }
   const env = balloonProto.clone();
@@ -1637,15 +1667,18 @@ function makeCamp(x, z, i = 0) {
   // one layout, built on purpose: tent at the back, fire ring in front of it,
   // seats beside the fire, and the smaller things placed around the outside.
   const g = new THREE.Group();
-  const tent = new THREE.Mesh(new THREE.ConeGeometry(1.75, 2.25, 4), mat({ color: 0xd98cb0 }));
-  tent.position.y = 1.125; tent.rotation.y = Math.PI / 4; tent.castShadow = true;
-  const door = new THREE.Mesh(new THREE.ConeGeometry(0.62, 0.86, 3), new THREE.MeshBasicMaterial({ color: 0x2a1730 }));
-  door.position.set(0, 0.43, 0.8); door.rotation.y = Math.PI / 4;
+  const tent = new THREE.Group();
+  if (tentProto) tent.add(tentProto.clone());
 
   // fire ring, a little way out from the door
   const FX = 0, FZ = 4.0;
-  const fire = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.58, 5), new THREE.MeshBasicMaterial({ color: 0xffb15e }));
-  fire.position.set(FX, 0.29, FZ);
+  const fire = new THREE.Group();
+  fire.position.set(FX, 0, FZ);
+  if (fireProto) fire.add(fireProto.clone());
+  if (!tentProto || !fireProto) campWait.push(() => {
+    if (tentProto && !tent.children.length) tent.add(tentProto.clone());
+    if (fireProto && !fire.children.length) fire.add(fireProto.clone());
+  });
   const light = new THREE.PointLight(0xffa860, 0, 10, 2);
   light.position.set(FX, 0.85, FZ);
   for (let k = 0; k < 7; k++) {
@@ -1719,7 +1752,7 @@ function makeCamp(x, z, i = 0) {
   mailbox.rotation.y = 0.4;
   const mpost = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 5), mat({ color: 0x8a7a52 }));
   mpost.position.set(-3.25, 0.35, 0.35);
-  g.add(tent, door, fire, light, pole, flag, mailbox, mpost);
+  g.add(tent, fire, light, pole, flag, mailbox, mpost);
 
   // memory wall, turned to face the fire
   if (save.postcards.length) {
@@ -6741,7 +6774,7 @@ function tick() {
   for (const c of camps) {
     // `night` used to exist; dayLight is the one number the sky drives now
     c.light.intensity = (1 - dayLight) * 2.2 * (0.85 + Math.sin(t * 7 + c.g.position.x) * 0.15);
-    c.fire.scale.y = 0.85 + Math.sin(t * 9 + c.g.position.z) * 0.2;
+    c.fire.scale.y = 0.96 + Math.sin(t * 9 + c.g.position.z) * 0.05;   // the model carries logs, so the flicker is small
     if (c.bird) c.bird.visible = hourNow >= 5 && hourNow < 9;
   }
 
