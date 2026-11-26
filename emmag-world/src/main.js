@@ -575,6 +575,25 @@ loadPack('/models/campfire.glb', (gl) => {
   m.emissiveIntensity = 0.3;
   fillCamps();
 });
+// the seat logs by the fire. the pack ships it standing on end, so roll the
+// geometry flat and sit it on y=0 once, then clone it per camp
+let logProto = null;
+loadPack('/models/woodlog.glb', (gl) => {
+  // the pack ships the log on a rotated, offset node, so normalise it here
+  // instead of trusting fitAll: longest axis is the log, and it sits on y=0
+  const geo = bake(partsOf(gl));
+  geo.computeBoundingBox();
+  const bb = geo.boundingBox, size = bb.getSize(new THREE.Vector3()), c = bb.getCenter(new THREE.Vector3());
+  const k = 1.15 / Math.max(size.x, size.y, size.z);
+  geo.translate(-c.x, -c.y, -c.z).scale(k, k, k);
+  if (size.y > size.x && size.y > size.z) geo.rotateZ(Math.PI / 2);   // stood on end -> lying along x
+  geo.computeBoundingBox();
+  geo.translate(0, -geo.boundingBox.min.y, 0);
+  logProto = new THREE.Mesh(geo, packMat());
+  logProto.material.color.multiplyScalar(2.4);   // the pack's browns bake near-black at dusk
+  logProto.castShadow = true;
+  fillCamps();
+});
 
 function dressBalloon(g) {
   if (!balloonProto) { balloonWaiters.push(() => dressBalloon(g)); return; }
@@ -1675,9 +1694,10 @@ function makeCamp(x, z, i = 0) {
   const fire = new THREE.Group();
   fire.position.set(FX, 0, FZ);
   if (fireProto) fire.add(fireProto.clone());
-  if (!tentProto || !fireProto) campWait.push(() => {
+  if (!tentProto || !fireProto || !logProto) campWait.push(() => {
     if (tentProto && !tent.children.length) tent.add(tentProto.clone());
     if (fireProto && !fire.children.length) fire.add(fireProto.clone());
+    if (logProto) for (const s of seats) if (!s.children.length) s.add(logProto.clone());
   });
   const light = new THREE.PointLight(0xffa860, 0, 10, 2);
   light.position.set(FX, 0.85, FZ);
@@ -1688,11 +1708,14 @@ function makeCamp(x, z, i = 0) {
     s.scale.set(1, 0.75, 1);
     g.add(s);
   }
+  const seats = [];
   for (const sx of [-1, 1]) {
-    const log = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 1.1, 7), mat({ color: 0x8a6642 }));
-    log.position.set(FX + sx * 1.95, 0.13, FZ);
-    log.rotation.z = Math.PI / 2; log.rotation.y = sx * 0.12;
-    g.add(log);
+    const seat = new THREE.Group();
+    seat.position.set(FX + sx * 1.95, 0, FZ);
+    seat.rotation.y = sx * 0.12;
+    if (logProto) seat.add(logProto.clone());
+    seats.push(seat);
+    g.add(seat);
   }
 
   // flag, on the open side
